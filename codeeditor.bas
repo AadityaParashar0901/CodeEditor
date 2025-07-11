@@ -4,7 +4,11 @@ DefLng A-Z
 
 Const True = -1, False = 0
 
-'$Include:'include\file_seperator.bi'
+$If WIN Then
+        Const FILE_SEPERATOR = "\"
+$Else
+                Const FILE_SEPERATOR = "/"
+$End If
 
 Type File
         As String Name, Path, Content, Cursors
@@ -12,51 +16,24 @@ Type File
         As Long ScrollOffset, FileID, SaveOffset
         As _Unsigned _Byte Opened, Saved
 End Type
-
-Type UI
-        As String Name
-        As _Unsigned _Byte Visible
-        As _Unsigned Integer Parent
-        As _Unsigned _Byte Type
-        As _Unsigned _Byte Property
-        As Integer X, Y, W, H
-        As Integer __X, __Y, __W, __H
-        As String Label, Content
-        As _Unsigned Long Response
-        As _Unsigned Long Image, BG, FG
-        As _Unsigned Long Key0_1, Key0_2
-        As _Unsigned Long Key1_1, Key1_2
-        As _Unsigned Long OnKey
-
-        As _Unsigned _Byte State, TotalStates
-        As Single Progress
-        As Long Scroll, MaxScroll
-        As _Unsigned Long Selected
-
-        As String ParsedLabel, ParsedLabelUnderlined
-        As String ParsedContent, ParsedContentUnderlined
-        As _Unsigned Long MenuDialogWidth, MenuDialogHeight
-End Type
-Const UI_TYPE_Label = 1
-Const UI_TYPE_Button = 2
-Const UI_TYPE_Dialog = 3
-Const UI_TYPE_ProgressBar = 4
-Const UI_TYPE_MenuButton = 5
-Const UI_TYPE_Image = 6
-Const UI_TYPE_ScrollBar = 7
-Const UI_TYPE_ToggleButton = 8
-Const UI_TYPE_ListView = 9
-Const UI_TYPE_TextView = 10
-Const UI_TYPE_Frame = 11
-Const UI_PROP_Center = 17
-Const UI_KEY_Visible = 33
-Const UI_KEY_Focus = 34
-Const UI_KEY_Visible_And_Focus = 35
-
-Dim Shared UI(0) As UI, UI_PARENT As _Unsigned Integer, UI_Focus_Parent As _Unsigned Integer, UI_Focus As _Unsigned Integer, UI_MouseWheel As Integer
-
 Dim Shared File(0) As File, CurrentFile As Long
 Dim Shared Rope(0) As String, EmptyRopePoints As String
+
+'-------- UI --------
+Type UI
+        As String Name, Label, Content, ParsedLabel, ParsedLabelUnderlined, ParsedContent, ParsedContentUnderlined
+        As _Unsigned _Byte Visible, Type, Property, State, TotalStates
+        As _Unsigned Integer Parent
+        As Integer X, Y, W, H, __X, __Y, __W, __H
+        As _Unsigned Long Response, Image, BG, FG, Key0_1, Key0_2, Key1_1, Key1_2, OnKey, Selected, MenuDialogWidth, MenuDialogHeight
+        As Single Progress
+        As Long Scroll, MaxScroll
+End Type
+Const UI_TYPE_Label = 1, UI_TYPE_Button = 2, UI_TYPE_Dialog = 3, UI_TYPE_ProgressBar = 4, UI_TYPE_MenuButton = 5, UI_TYPE_Image = 6, UI_TYPE_ScrollBar = 7, UI_TYPE_ToggleButton = 8, UI_TYPE_ListView = 9, UI_TYPE_TextView = 10, UI_TYPE_Frame = 11
+Const UI_PROP_Center = 17
+Const UI_KEY_Visible = 33, UI_KEY_Focus = 34, UI_KEY_Visible_And_Focus = 35
+Dim Shared UI(0) As UI, UI_PARENT As _Unsigned Integer, UI_Focus_Parent As _Unsigned Integer, UI_Focus As _Unsigned Integer, UI_MouseWheel As Integer
+'--------------------
 
 Dim Shared As String SaveFileQueue
 
@@ -65,7 +42,7 @@ NewConfig
 CreateConfig
 ReadConfigFile
 
-'--- Menu Bar ---
+'-------- Menu Bar --------
 UI_MenuButton_File = UI_New("UI_MenuButton_File", UI_TYPE_MenuButton, 0, 0, 48, 16, " File ", ListStringFromString("\New File|Ctrl+N,\Open File|Ctrl+O,\Save File|Ctrl+S,Save \As File,\Close File|Ctrl+W,E\xit|Ctrl+Q"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 70, 100307, 102
@@ -78,8 +55,8 @@ UI_Set_KeyMaps 100308, 86, 100307, 118
 UI_MenuButton_Cursors = UI_New("UI_MenuButton_Cursors", UI_TYPE_MenuButton, 184, 0, 72, 16, " Cursors ", ListStringFromString("Go to Cursor|Alt+C"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 67, 100307, 99
-'----------------
-'--- Status Bar ---
+'--------------------------
+'-------- Status Bar --------
 UI_ToggleButton_LineSeperator = UI_New("UI_ToggleButton_LineSeperator", UI_TYPE_ToggleButton, 16, -16, 48, 16, "", ListStringFromString("[CRLF],[  LF],[CR  ]"))
 Select Case Config_FileSeperator
         Case Chr$(13) + Chr$(10): UI(UI_ToggleButton_LineSeperator).State = 0
@@ -87,20 +64,21 @@ Select Case Config_FileSeperator
         Case Chr$(13): UI(UI_ToggleButton_LineSeperator).State = 2
 End Select
 UI_Set_BG _RGB32(0, 191, 0)
-'------------------
-'--- Side Pane ---
+'----------------------------
+'-------- Side Pane --------
 UI_Side_Pane = UI_New("UI_Side_Pane", UI_TYPE_Frame, 0, 16, 128, -16, "", "")
 UI_Set_BG _RGB32(63)
-UI_PARENT = UI_Side_Pane
-
-UI_PARENT = 0
-'-----------------
-'--- Open File Dialog ---
-UI_Dialog_OpenFile = UI_New("UI_Dialog_OpenFile", UI_TYPE_Dialog, 0, 0, -64, -32, "Open File", "")
-'------------------------
-'--- Save As Dialog ---
-UI_Dialog_SaveFileAs = UI_New("UI_Dialog_SaveFileAs", UI_TYPE_Dialog, 0, 0, -64, -32, "Save As File", "")
-'----------------------
+'---------------------------
+'-------- Open File Dialog --------
+UI_Dialog_OpenFile = UI_New("UI_Dialog_OpenFile", UI_TYPE_Dialog, 0, 0, -128, -128, "Open File", "")
+UI_Set_FG -1
+UI(UI_Dialog_OpenFile).Visible = 0
+'----------------------------------
+'-------- Save As Dialog --------
+UI_Dialog_SaveFileAs = UI_New("UI_Dialog_SaveFileAs", UI_TYPE_Dialog, 0, 0, -128, -128, "Save As File", "")
+UI_Set_FG -1
+UI(UI_Dialog_SaveFileAs).Visible = 0
+'--------------------------------
 
 Dim Shared As Long MainScreen, tmpScreen
 MainScreen = _NewImage(960, 540, 32)
@@ -151,6 +129,9 @@ Do
         End If
         UI_Draw
         If UI_Focus = 0 Then
+                If _MouseButton(1) And MouseInBox(0, 16, _Width - 9, _Height - 17) Then
+                        If KeyAlt Then AddCursor _SHR(_MouseX - TextOffsetX, 3) + 1, _SHR(_MouseY - TextOffsetY, 4) + 1 Else SetCursor _SHR(_MouseX - TextOffsetX, 3) + 1, _SHR(_MouseY - TextOffsetY, 4) + 1
+                End If
                 For I = 1 To Len(File(CurrentFile).Cursors) Step 8
                         CursorX = CVL(Mid$(File(CurrentFile).Cursors, I, 4))
                         CursorY = CVL(Mid$(File(CurrentFile).Cursors, I + 4, 4))
@@ -230,6 +211,18 @@ Loop
 WriteConfigFile
 System
 
+Sub AddCursor (X As Long, Y As Long)
+        For I = 1 To Len(File(CurrentFile).Cursors) Step 8
+                CX = CVL(Mid$(File(CurrentFile).Cursors, I, 4))
+                CY = CVL(Mid$(File(CurrentFile).Cursors, I + 4, 4))
+                If CX = X And CY = Y Then Exit Sub
+        Next I
+        File(CurrentFile).Cursors = File(CurrentFile).Cursors + MKL$(X) + MKL$(Y)
+End Sub
+Sub SetCursor (X As Long, Y As Long)
+        File(CurrentFile).Cursors = MKL$(X) + MKL$(Y)
+End Sub
+
 Sub InsertText (T$, CursorX As Long, CursorY As Long)
         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
         Rope(RopeI) = Left$(Rope(RopeI), CursorX - 1) + T$ + Mid$(Rope(RopeI), CursorX)
@@ -281,6 +274,7 @@ Sub DrawText
         Next I
 End Sub
 
+'-------- Config Files --------
 Sub ReadConfigFile
         F = FreeFile
         If _FileExists("config.ini") = 0 Then Exit Sub
@@ -317,7 +311,9 @@ Sub WriteConfigFile
         Put #F, , Config$
         Close #F
 End Sub
+'------------------------------
 
+'-------- File Management --------
 Sub NewFile
         FileID = UBound(File) + 1: ReDim _Preserve As File File(1 To FileID)
         File(FileID).Name = "Untitled.txt": File(FileID).Path = _StartDir$ + FILE_SEPERATOR + "Untitled.txt"
@@ -343,7 +339,6 @@ Sub OpenFileTasks: Static As Long OpeningFileDialog, OpeningFile_FileNameLabel, 
         If OpeningFileDialog = 0 Then
                 OpeningFileDialog = UI_New("Dialog_OpeningFile", UI_TYPE_Dialog, 0, 0, 256, 64, "Opening File", "")
                 UI(OpeningFileDialog).Visible = 0
-                UI(OpeningFileDialog).Property = UI_PROP_Center
                 UI_PARENT = OpeningFileDialog
                 OpeningFile_FileNameLabel = UI_New("Dialog_OpeningFile_Label", UI_TYPE_Label, 16, 24, 224, 16, "", "")
                 OpeningFile_Progress = UI_New("Dialog_OpeningFile_Progress", UI_TYPE_ProgressBar, 16, 48, 224, 4, "", "")
@@ -378,7 +373,6 @@ Sub SaveFileTasks: Static As Long SavingFileDialog, SavingFile_FileNameLabel, Sa
         If SavingFileDialog = 0 Then
                 SavingFileDialog = UI_New("Dialog_SavingFile", UI_TYPE_Dialog, 0, 0, 256, 64, "Saving File", "")
                 UI(SavingFileDialog).Visible = 0
-                UI(SavingFileDialog).Property = UI_PROP_Center
                 UI_PARENT = SavingFileDialog
                 SavingFile_FileNameLabel = UI_New("Dialog_SavingFile_Label", UI_TYPE_Label, 16, 24, 224, 16, "", "")
                 SavingFile_Progress = UI_New("Dialog_SavingFile_Progress", UI_TYPE_ProgressBar, 16, 48, 224, 4, "", "")
@@ -402,7 +396,6 @@ Sub SaveFileTasks: Static As Long SavingFileDialog, SavingFile_FileNameLabel, Sa
         SaveFileQueue = Mid$(SaveFileQueue, 5)
         Close #File(FileID).FileID
 End Sub
-
 Function GetNewRopePointer&
         If Len(EmptyRopePoints) = 0 Then
                 I = UBound(Rope) + 1
@@ -414,14 +407,18 @@ Function GetNewRopePointer&
                 EmptyRopePoints = Mid$(EmptyRopePoints, 5)
         End If
 End Function
+'---------------------------------
 
+'-------- Workspace Management --------
 Sub OpenWorkspace (Path$)
 End Sub
 Sub SaveWorkspace
 End Sub
 Sub CloseWorkspace
 End Sub
+'--------------------------------------
 
+'----------------------------------------------------------------Libraries----------------------------------------------------------------
 Sub WaitForMouseButtonRelease
         While _MouseInput Or _MouseButton(1): Wend
 End Sub
@@ -440,14 +437,7 @@ Function ceil& (t#)
         t& = Int(t#)
         ceil& = t& + Sgn(t# - t&)
 End Function
-'$Include:'include\mouseinbox.bm'
-'$Include:'include\max.bm'
-'$Include:'include\min.bm'
-'$Include:'include\clamp.bm'
-'$Include:'include\inrange.bm'
-'$Include:'include\dsa\liststring.bas'
-'$Include:'include\dsa\map.bas'
-'$Include:'include\string.bm'
+
 Function GetDirList$ (CurrentDirectory$)
         If CurrentDirectory$ = "" Then
                 $If WIN Then
@@ -490,6 +480,7 @@ Function UI_New (__Name As String, __Type As _Unsigned _Byte, __X As Integer, __
         UI(I).W = __W
         UI(I).H = __H
         UI(I).Label = __Label
+        If __Type = UI_TYPE_Dialog Then UI(I).Property = UI_PROP_Center Else UI(I).Property = 0
         If InStr(UI(I).Label, "\") Then
                 UI(I).ParsedLabel = ""
                 UI(I).ParsedLabelUnderlined = ""
@@ -757,3 +748,249 @@ Sub UI_Draw
         Next I
         Color __FG, __BG
 End Sub
+Function MouseInBox (X1, Y1, X2, Y2)
+        MouseInBox = X1 <= _MouseX And _MouseX <= X2 And Y1 <= _MouseY And _MouseY <= Y2
+End Function
+Function Max (A, B)
+        Max = -A * (A > B) - B * (A <= B)
+End Function
+Function Min (A, B)
+        Min = -A * (A < B) - B * (A >= B)
+End Function
+Function Clamp (A, B, C)
+        Clamp = B - (A - B) * (B < A) - (C - B) * (C < B)
+End Function
+Function ClampCycle (A, B, C)
+        ClampCycle = B - (C - B) * (B < A) - (A - B) * (C < B)
+End Function
+Function ClampCycleDifference (A, B, C)
+        ClampCycleDifference = B - C * (B < A) - A * (C < B)
+End Function
+Function InRange (A, B, C)
+        InRange = (A <= B) And (B <= C)
+End Function
+Function ListStringNew$
+        ListStringNew$ = Chr$(1) + MKL$(0)
+End Function
+Function ListStringFromString$ (ARRAY$)
+        LIST$ = Chr$(1) + MKL$(0)
+        __LISTLENGTH~& = 0
+        For I~& = 1 To Len(ARRAY$)
+                BYTE~%% = Asc(ARRAY$, I~&)
+                Select Case BYTE~%%
+                        Case 91: NEST~& = NEST~& + 1
+                                V$ = V$ + Chr$(BYTE~%%)
+                        Case 93: NEST~& = NEST~& - 1
+                                V$ = V$ + Chr$(BYTE~%%)
+                        Case 44: If NEST~& = 0 Then
+                                        __LISTLENGTH~& = __LISTLENGTH~& + 1
+                                        LIST$ = LIST$ + MKI$(Len(V$)) + V$
+                                        V$ = ""
+                                Else
+                                        V$ = V$ + Chr$(BYTE~%%)
+                                End If
+                        Case Else:
+                                V$ = V$ + Chr$(BYTE~%%)
+                End Select
+        Next I~&
+        If Len(V$) Then
+                LIST$ = LIST$ + MKI$(Len(V$)) + V$
+                __LISTLENGTH~& = __LISTLENGTH~& + 1
+                V$ = ""
+        End If
+        Mid$(LIST$, 2, 4) = MKL$(__LISTLENGTH~&)
+        ListStringFromString$ = LIST$
+        LIST$ = ""
+End Function
+Function ListStringFromArray$ (ARRAY() As String, START_INDEX~&, END_INDEX~&)
+        K~& = 0
+        For I~& = START_INDEX~& To END_INDEX~&
+                K~& = K~& + 2 + Len(ARRAY(I~&))
+        Next I~&
+        LIST$ = Chr$(1) + MKL$(END_INDEX~& - START_INDEX~& + 1) + String$(K~&, 0)
+        K~& = 6
+        L~% = 0
+        For I~& = START_INDEX~& To END_INDEX~&
+                L~% = Len(ARRAY(I~&))
+                Mid$(LIST$, K~&, 2 + L~%) = MKI$(L~%) + ARRAY(I~&)
+                K~& = K~& + L~% + 2
+        Next I~&
+        ListStringFromArray$ = LIST$
+        LIST$ = ""
+End Function
+Function ListStringPrint$ (LIST$)
+        If Len(LIST$) < 5 Then Exit Function
+        If Asc(LIST$) <> 1 Then Exit Function
+        O = 6: T_OFFSET = 2
+        T$ = String$(Len(LIST$) - 4, 0)
+        Asc(T$) = 91 '[
+        For I = 1 To CVL(Mid$(LIST$, 2, 4)) - 1
+                L = CVI(Mid$(LIST$, O, 2))
+                Mid$(T$, T_OFFSET, L + 1) = Mid$(LIST$, O + 2, L) + ","
+                T_OFFSET = T_OFFSET + L + 1
+                O = O + L + 2
+        Next I
+        L = CVI(Mid$(LIST$, O, 2))
+        Mid$(T$, T_OFFSET, L + 1) = Mid$(LIST$, O + 2, L) + "]"
+        ListStringPrint$ = Left$(T$, T_OFFSET + L)
+End Function
+Function ListStringLength~& (LIST$)
+        If Len(LIST$) < 5 Then Exit Function
+        If Asc(LIST$) <> 1 Then Exit Function
+        ListStringLength~& = CVL(Mid$(LIST$, 2, 4))
+End Function
+Sub ListStringAdd (LIST$, ITEM$)
+        If Len(LIST$) < 5 Then Exit Sub
+        If Asc(LIST$) <> 1 Then Exit Sub
+        LIST$ = Chr$(1) + MKL$(CVL(Mid$(LIST$, 2, 4)) + 1) + Mid$(LIST$, 6) + MKI$(Len(ITEM$)) + ITEM$
+End Sub
+Function ListStringGet$ (LIST$, POSITION As _Unsigned Long)
+        If Len(LIST$) < 5 Then Exit Function
+        If Asc(LIST$) <> 1 Then Exit Function
+        If CVL(Mid$(LIST$, 2, 4)) < POSITION - 1 Then Exit Function
+        O = 6
+        For I = 1 To POSITION - 1
+                L = CVI(Mid$(LIST$, O, 2))
+                O = O + L + 2
+        Next I
+        ListStringGet$ = Mid$(LIST$, O + 2, CVI(Mid$(LIST$, O, 2)))
+End Function
+Sub ListStringInsert (LIST$, ITEM$, POSITION As _Unsigned Long)
+        If Len(LIST$) < 5 Then Exit Sub
+        If Asc(LIST$) <> 1 Then Exit Sub
+        If CVL(Mid$(LIST$, 2, 4)) < POSITION - 1 Then Exit Sub
+        O = 6
+        For I = 1 To POSITION - 1
+                L = CVI(Mid$(LIST$, O, 2))
+                O = O + L + 2
+        Next I
+        LIST$ = Chr$(1) + MKL$(CVL(Mid$(LIST$, 2, 4)) + 1) + Mid$(LIST$, 6, O - 6) + MKI$(Len(ITEM$)) + ITEM$ + Mid$(LIST$, O)
+End Sub
+Sub ListStringDelete (LIST$, POSITION As _Unsigned Long)
+        If Len(LIST$) < 5 Then Exit Sub
+        If Asc(LIST$) <> 1 Then Exit Sub
+        If CVL(Mid$(LIST$, 2, 4)) < POSITION - 1 Then Exit Sub
+        O = 6
+        For I = 1 To POSITION - 1
+                L = CVI(Mid$(LIST$, O, 2))
+                O = O + L + 2
+        Next I
+        LIST$ = Chr$(1) + MKL$(CVL(Mid$(LIST$, 2, 4)) - 1) + Mid$(LIST$, 6, O - 6) + Mid$(LIST$, O + CVI(Mid$(LIST$, O, 2)) + 2)
+End Sub
+Function ListStringSearch~& (LIST$, ITEM$)
+        If Len(LIST$) < 5 Then Exit Function
+        If Asc(LIST$) <> 1 Then Exit Function
+        O = 6
+        For I = 1 To CVL(Mid$(LIST$, 2, 4))
+                L = CVI(Mid$(LIST$, O, 2))
+                If ITEM$ = Mid$(LIST$, O + 2, L) Then ListStringSearch~& = I: Exit Function
+                O = O + L + 2
+        Next I
+        ListStringSearch~& = 0
+End Function
+Function ListStringSearchI~& (LIST$, ITEM$)
+        If Len(LIST$) < 5 Then Exit Function
+        If Asc(LIST$) <> 1 Then Exit Function
+        O = 6
+        For I = 1 To CVL(Mid$(LIST$, 2, 4))
+                L = CVI(Mid$(LIST$, O, 2))
+                If _StriCmp(ITEM$, Mid$(LIST$, O + 2, L)) = 0 Then ListStringSearchI~& = I: Exit Function
+                O = O + L + 2
+        Next I
+        ListStringSearchI~& = 0
+End Function
+Sub ListStringEdit (LIST$, ITEM$, POSITION As _Unsigned Long)
+        If Len(LIST$) < 5 Then Exit Sub
+        If Asc(LIST$) <> 1 Then Exit Sub
+        If CVL(Mid$(LIST$, 2, 4)) < POSITION - 1 Then Exit Sub
+        O = 6
+        For I = 1 To POSITION - 1
+                L = CVI(Mid$(LIST$, O, 2))
+                O = O + L + 2
+        Next I
+        LIST$ = Left$(LIST$, O - 1) + MKI$(Len(ITEM$)) + ITEM$ + Mid$(LIST$, O + CVI(Mid$(LIST$, O, 2)) + 2)
+End Sub
+Function ListStringAppend$ (LIST1$, LIST2$)
+        If Len(LIST1$) < 5 Then Exit Function
+        If Len(LIST2$) < 5 Then Exit Function
+        If Asc(LIST1$) <> 1 Then Exit Function
+        If Asc(LIST2$) <> 1 Then Exit Function
+        ListStringAppend$ = Chr$(1) + MKL$(CVL(Mid$(LIST1$, 2, 4)) + CVL(Mid$(LIST2$, 2, 4))) + Mid$(LIST1$, 6) + Mid$(LIST2$, 6)
+End Function
+Function MapNew$
+        MapNew$ = Chr$(8) + MKL$(0)
+End Function
+Sub MapSetKey (__MAP$, __KEY$, __VALUE$)
+        If Len(__MAP$) < 5 Then Exit Sub
+        If Asc(__MAP$, 1) <> 8 Then Exit Sub
+        Dim __LENGTH~&, __OFFSET~&
+        __LENGTH~& = CVL(Mid$(__MAP$, 2, 4))
+        __OFFSET~& = 6
+        Dim __LEN_KEY~&, __LEN_VALUE~&
+        For __I~& = 1 To __LENGTH~& 'check if exists
+                __LEN_KEY~& = CVL(Mid$(__MAP$, __OFFSET~&, 4))
+                __LEN_VALUE~& = CVL(Mid$(__MAP$, __OFFSET~& + 4, 4))
+                __K$ = Mid$(__MAP$, __OFFSET~& + 8, __LEN_KEY~&)
+                If __KEY$ = __K$ Then __BOOL` = -1: Exit For
+                __V$ = Mid$(__MAP$, __OFFSET~& + 8 + __LEN_KEY~&, __LEN_VALUE~&)
+                __OFFSET~& = __OFFSET~& + 8 + __LEN_KEY~& + __LEN_VALUE~&
+        Next __I~&
+        If __BOOL` Then
+                __MAP$ = Left$(__MAP$, __OFFSET~& - 1) + MKL$(Len(__KEY$)) + MKL$(Len(__VALUE$)) + __KEY$ + __VALUE$ + Mid$(__MAP$, __OFFSET~& + 8 + __LEN_KEY~& + __LEN_VALUE~&)
+        Else
+                __MAP$ = Chr$(8) + MKL$(__LENGTH~& + 1) + Mid$(__MAP$, 6, __OFFSET~& - 6) + MKL$(Len(__KEY$)) + MKL$(Len(__VALUE$)) + __KEY$ + __VALUE$
+        End If
+End Sub
+Function MapPrint$ (__MAP$)
+        If Len(__MAP$) < 5 Then Exit Function
+        If Asc(__MAP$, 1) <> 8 Then Exit Function
+        Dim __LENGTH~&, __OFFSET~&
+        __LENGTH~& = CVL(Mid$(__MAP$, 2, 4))
+        __OFFSET~& = 6
+        Dim __LEN_KEY~&, __LEN_VALUE~&
+        __PRINT$ = ""
+        For __I~& = 1 To __LENGTH~& 'check if exists
+                __LEN_KEY~& = CVL(Mid$(__MAP$, __OFFSET~&, 4))
+                __LEN_VALUE~& = CVL(Mid$(__MAP$, __OFFSET~& + 4, 4))
+                __K$ = Mid$(__MAP$, __OFFSET~& + 8, __LEN_KEY~&)
+                __V$ = Mid$(__MAP$, __OFFSET~& + 8 + __LEN_KEY~&, __LEN_VALUE~&)
+                __OFFSET~& = __OFFSET~& + 8 + __LEN_KEY~& + __LEN_VALUE~&
+                __PRINT$ = __PRINT$ + __K$ + ":" + __V$
+                If __I~& < __LENGTH~& Then __PRINT$ = __PRINT$ + ","
+        Next __I~&
+        MapPrint$ = "{" + __PRINT$ + "}"
+End Function
+Function MapGetKey$ (__MAP$, __KEY$)
+        If Len(__MAP$) < 5 Then Exit Function
+        If Asc(__MAP$, 1) <> 8 Then Exit Function
+        Dim __LENGTH~&, __OFFSET~&
+        __LENGTH~& = CVL(Mid$(__MAP$, 2, 4))
+        __OFFSET~& = 6
+        Dim __LEN_KEY~&, __LEN_VALUE~&
+        For __I~& = 1 To __LENGTH~& 'check if exists
+                __LEN_KEY~& = CVL(Mid$(__MAP$, __OFFSET~&, 4))
+                __LEN_VALUE~& = CVL(Mid$(__MAP$, __OFFSET~& + 4, 4))
+                __K$ = Mid$(__MAP$, __OFFSET~& + 8, __LEN_KEY~&)
+                __V$ = Mid$(__MAP$, __OFFSET~& + 8 + __LEN_KEY~&, __LEN_VALUE~&)
+                If __KEY$ = __K$ Then MapGetKey$ = __V$: Exit Function
+                __OFFSET~& = __OFFSET~& + 8 + __LEN_KEY~& + __LEN_VALUE~&
+        Next __I~&
+End Function
+Sub MapDeleteKey (__MAP$, __KEY$)
+        If Len(__MAP$) < 5 Then Exit Sub
+        If Asc(__MAP$, 1) <> 8 Then Exit Sub
+        Dim __LENGTH~&, __OFFSET~&
+        __LENGTH~& = CVL(Mid$(__MAP$, 2, 4))
+        __OFFSET~& = 6
+        Dim __LEN_KEY~&, __LEN_VALUE~&
+        For __I~& = 1 To __LENGTH~& 'check if exists
+                __LEN_KEY~& = CVL(Mid$(__MAP$, __OFFSET~&, 4))
+                __LEN_VALUE~& = CVL(Mid$(__MAP$, __OFFSET~& + 4, 4))
+                __K$ = Mid$(__MAP$, __OFFSET~& + 8, __LEN_KEY~&)
+                If __KEY$ = __K$ Then __BOOL` = -1: Exit For
+                __V$ = Mid$(__MAP$, __OFFSET~& + 8 + __LEN_KEY~&, __LEN_VALUE~&)
+                __OFFSET~& = __OFFSET~& + 8 + __LEN_KEY~& + __LEN_VALUE~&
+        Next __I~&
+        If __BOOL` Then __MAP$ = Chr$(8) + MKL$(__LENGTH~& - 1) + Mid$(__MAP$, 6, __OFFSET~& - 6) + Mid$(__MAP$, __OFFSET~& + 8 + __LEN_KEY~& + __LEN_VALUE~&)
+End Sub
+'-----------------------------------------------------------------------------------------------------------------------------------------
