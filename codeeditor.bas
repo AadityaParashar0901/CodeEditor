@@ -37,13 +37,13 @@ Dim Shared UI(0) As UI, UI_PARENT As _Unsigned Integer, UI_Focus_Parent As _Unsi
 
 Dim Shared As String SaveFileQueue
 
-Dim Shared Config$, Config_BackgroundColor As Long, Config_TextColor As Long, Config_CurrentWorkspace As String, Config_FileSeperator As String
+Dim Shared Config$, Config_BackgroundColor As Long, Config_TextColor As Long, Config_CurrentWorkspace As String, Config_FileSeperator As String, Config_OpenFileSpeed As _Unsigned Long
 NewConfig
 CreateConfig
 ReadConfigFile
 
 '-------- Menu Bar --------
-UI_MenuButton_File = UI_New("UI_MenuButton_File", UI_TYPE_MenuButton, 0, 0, 48, 16, " File ", ListStringFromString("\New File|Ctrl+N,\Open File|Ctrl+O,\Save File|Ctrl+S,Save \As File,\Close File|Ctrl+W,E\xit|Ctrl+Q"))
+UI_MenuButton_File = UI_New("UI_MenuButton_File", UI_TYPE_MenuButton, 0, 0, 48, 16, " File ", ListStringFromString("\New File|Ctrl+N,\Open File|Ctrl+O,\Save File|Ctrl+S,Save \As File|Ctrl+Shift+S,\Close File|Ctrl+W,E\xit|Ctrl+Q"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 70, 100307, 102
 UI_MenuButton_Workspace = UI_New("UI_MenuButton_Workspace", UI_TYPE_MenuButton, 48, 0, 88, 16, " Workspace ", ListStringFromString("\Open Workspace,\Save Workspace,\Close Workspace"))
@@ -56,6 +56,9 @@ UI_MenuButton_Cursors = UI_New("UI_MenuButton_Cursors", UI_TYPE_MenuButton, 184,
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 67, 100307, 99
 '--------------------------
+'-------- Scroll Bar --------
+UI_ScrollBar_Text = UI_New("UI_ScrollBar_Text", UI_TYPE_ScrollBar, -8, 17, -1, -16, "", "")
+'----------------------------
 '-------- Status Bar --------
 UI_ToggleButton_LineSeperator = UI_New("UI_ToggleButton_LineSeperator", UI_TYPE_ToggleButton, 16, -16, 48, 16, "", ListStringFromString("[CRLF],[  LF],[CR  ]"))
 Select Case Config_FileSeperator
@@ -66,8 +69,8 @@ End Select
 UI_Set_BG _RGB32(0, 191, 0)
 '----------------------------
 '-------- Side Pane --------
-UI_Side_Pane = UI_New("UI_Side_Pane", UI_TYPE_Frame, 0, 16, 128, -16, "", "")
-UI_Set_BG _RGB32(63)
+UI_Side_Pane = UI_New("UI_Side_Pane", UI_TYPE_Frame, 0, 17, 128, -16, "", "")
+UI_Set_BG _RGB32(47)
 '---------------------------
 '-------- Open File Dialog --------
 Dim Shared As Integer UI_Dialog_OpenFile
@@ -111,13 +114,12 @@ Do
         UI_MouseWheel = 0
         While _MouseInput
                 UI_MouseWheel = UI_MouseWheel + _MouseWheel
-                File(CurrentFile).ScrollOffset = Clamp(1, File(CurrentFile).ScrollOffset + 3 * _MouseWheel, File(CurrentFile).TotalLines)
+                If UI_Focus = 0 Then File(CurrentFile).ScrollOffset = Clamp(1, File(CurrentFile).ScrollOffset + 3 * _MouseWheel, File(CurrentFile).TotalLines)
         Wend
 
         OpenFileTasks: SaveFileTasks
 
-        K$ = InKey$
-        KeyHit = _KeyHit
+        K$ = InKey$: KeyHit = _KeyHit
         KeyShift = _KeyDown(100303) Or _KeyDown(100304)
         KeyCtrl = _KeyDown(100305) Or _KeyDown(100306)
         KeyAlt = _KeyDown(100307) Or _KeyDown(100308)
@@ -131,11 +133,14 @@ Do
         If UI(UI_Dialog_OpenFile).Visible Then
                 OpenFileDialog
         ElseIf UI(UI_Dialog_SaveFileAs).Visible Then
-
+                SaveFileAsDialog
         ElseIf UI_Focus = 0 And CurrentFile Then
+                If UI(UI_ScrollBar_Text).Response Then File(CurrentFile).ScrollOffset = UI(UI_ScrollBar_Text).Scroll
                 If _MouseButton(1) And MouseInBox(0, 16, _Width - 9, _Height - 17) Then
                         If KeyAlt Then AddCursor _SHR(_MouseX - TextOffsetX, 3) + 1, _SHR(_MouseY - TextOffsetY, 4) + 1 Else SetCursor _SHR(_MouseX - TextOffsetX, 3) + 1, _SHR(_MouseY - TextOffsetY, 4) + 1
                 End If
+                UI(UI_ScrollBar_Text).MaxScroll = File(CurrentFile).TotalLines
+                UI(UI_ScrollBar_Text).Scroll = File(CurrentFile).ScrollOffset
                 For I = 1 To Len(File(CurrentFile).Cursors) Step 8
                         CursorX = CVL(Mid$(File(CurrentFile).Cursors, I, 4))
                         CursorY = CVL(Mid$(File(CurrentFile).Cursors, I + 4, 4))
@@ -190,6 +195,10 @@ Do
                         Y = TextOffsetY + _SHL(CursorY - File(CurrentFile).ScrollOffset, 4)
                         Line (X, Y)-(X + 7, Y + 15), -1, B
                 Next I
+                Select Case KeyHit
+                        Case 16384: 'F6
+                                CurrentFile = ClampCycle(LBound(File), CurrentFile + 1, UBound(File))
+                End Select
         End If
         _Display
         If UI(UI_MenuButton_File).Response = 1 Or (KeyCtrl And (KeyHit = 78 Or KeyHit = 110)) Then NewFile
@@ -219,10 +228,10 @@ Sub AddCursor (X As Long, Y As Long)
                 CY = CVL(Mid$(File(CurrentFile).Cursors, I + 4, 4))
                 If CX = X And CY = Y Then Exit Sub
         Next I
-        File(CurrentFile).Cursors = File(CurrentFile).Cursors + MKL$(X) + MKL$(Y)
+        File(CurrentFile).Cursors = File(CurrentFile).Cursors + MKL$(Max(1, X)) + MKL$(Clamp(1, Y, File(CurrentFile).TotalLines))
 End Sub
 Sub SetCursor (X As Long, Y As Long)
-        File(CurrentFile).Cursors = MKL$(X) + MKL$(Y)
+        File(CurrentFile).Cursors = MKL$(Max(1, X)) + MKL$(Clamp(1, Y, File(CurrentFile).TotalLines))
 End Sub
 
 Sub InsertText (T$, CursorX As Long, CursorY As Long)
@@ -274,18 +283,18 @@ Sub OpenFileDialog
                 Exit Sub
         End If
         Update = 0
-        If UI(UI_Dialog_OpenFile_TextView_Dir).Response = 13 Then
-                If _DirExists(UI(UI_Dialog_OpenFile_TextView_Dir).Content) Then
-                        CurrentDirectory = UI(UI_Dialog_OpenFile_TextView_Dir).Content
-                        Update = 1
-                ElseIf _FileExists(UI(UI_Dialog_OpenFile_TextView_Dir).Content) Then
-                        OpenFile UI(UI_Dialog_OpenFile_TextView_Dir).Content
-                        CurrentDirectory = UI(UI_Dialog_OpenFile_TextView_Dir).Content
-                        Update = 1
-                        UI(UI_Dialog_OpenFile).Visible = 0
-                        UI_Focus = 0
-                End If
-        End If
+        Select Case UI(UI_Dialog_OpenFile_TextView_Dir).Response
+                Case 13: If _DirExists(UI(UI_Dialog_OpenFile_TextView_Dir).Content) Then
+                                CurrentDirectory = UI(UI_Dialog_OpenFile_TextView_Dir).Content
+                                Update = 1
+                        ElseIf _FileExists(UI(UI_Dialog_OpenFile_TextView_Dir).Content) Then
+                                OpenFile UI(UI_Dialog_OpenFile_TextView_Dir).Content
+                                CurrentDirectory = UI(UI_Dialog_OpenFile_TextView_Dir).Content
+                                Update = 1
+                                UI(UI_Dialog_OpenFile).Visible = 0
+                                UI_Focus = 0
+                        End If
+        End Select
         If Len(UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent) = 0 Then Update = 1
         Select Case UI(UI_Dialog_OpenFile_ListView_Dir).Selected
                 Case 0
@@ -311,7 +320,7 @@ Sub OpenFileDialog
         If Update Then
                 UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent = ListStringAppend(ListStringFromString(".."), GetDirList$(CurrentDirectory))
                 UI(UI_Dialog_OpenFile_ListView_Dir).Selected = 0
-                UI(UI_Dialog_OpenFile_TextView_Dir).Content = CurrentDirectory
+                If UI_Focus <> UI_Dialog_OpenFile_TextView_Dir Then UI(UI_Dialog_OpenFile_TextView_Dir).Content = CurrentDirectory
         End If
 End Sub
 Sub SaveFileAsDialog
@@ -325,8 +334,32 @@ Sub SaveFileAsDialog
         End If
 End Sub
 Sub DrawMenuBar
+        Static Dialog, ListView, ScrollBar
+        If Dialog = 0 Then
+                Dialog = UI_New("UI_Dialog_FilesList", UI_TYPE_Dialog, -256, 16, 256, 32, "Files", "")
+                UI_Set_FG -1
+                UI(Dialog).Property = 0
+                UI(Dialog).Visible = 0
+                UI_PARENT = Dialog
+                ListView = UI_New("UI_Dialog_FilesList_ListView", UI_TYPE_ListView, 8, 16, -16, -16, "", "")
+                ScrollBar = UI_New("UI_Dialog_FilesList_ScrollBar", UI_TYPE_ScrollBar, -16, 16, -8, -16, "", "")
+                UI_PARENT = 0
+        End If
+        If UI(Dialog).Visible Then
+                If UI_Focus = 0 Then UI(Dialog).Visible = 0
+                If UI(ScrollBar).Response Then UI(ListView).Scroll = UI(ScrollBar).Scroll
+                UI(Dialog).H = _SHL(2 + Clamp(1, UBound(File), 4), 4)
+                UI(ListView).ParsedContent = ListStringNew
+                For I = 1 To UBound(File): ListStringAdd UI(ListView).ParsedContent, File(I).Name: Next I
+                UI(ScrollBar).MaxScroll = UBound(File)
+                UI(ScrollBar).Scroll = UI(ListView).Scroll
+                If UI(ListView).Response Then CurrentFile = Clamp(1, UI(ListView).Response, UBound(File)): UI(Dialog).Visible = 0
+        End If
         Line (0, 0)-(_Width - 1, 16), _RGB32(0, 63, 127), BF
-        If CurrentFile Then _PrintString (_Width - 8 * Len(File(CurrentFile).Name) - 16, 0), "[" + File(CurrentFile).Name + "]"
+        If CurrentFile Then
+                _PrintString (_Width - 8 * Len(File(CurrentFile).Name) - 16, 0), "[" + File(CurrentFile).Name + "]"
+                If MouseInBox(_Width - 8 * Len(File(CurrentFile).Name) - 16, 0, _Width, 16) And _MouseButton(1) Then UI(Dialog).Visible = -1: UI_Focus = Dialog: WaitForMouseButtonRelease
+        End If
 End Sub
 Sub DrawStatusBar
         Line (0, _Height - 16)-(_Width - 1, _Height - 1), _RGB32(0, 63, 127), BF
@@ -360,25 +393,28 @@ Sub NewConfig
         Config_TextColor = _RGB32(255)
         Config_CurrentWorkspace = ""
         Config_FileSeperator = Chr$(13) + Chr$(10)
+        Config_OpenFileSpeed = 256
 End Sub
 Sub CreateConfig
         MapSetKey Config$, "BackgroundColor", MKL$(Config_BackgroundColor)
         MapSetKey Config$, "TextColor", MKL$(Config_TextColor)
         MapSetKey Config$, "CurrentWorkspace", Config_CurrentWorkspace
         MapSetKey Config$, "FileSeperator", Config_FileSeperator
+        MapSetKey Config$, "OpenFileSpeed", MKL$(Config_OpenFileSpeed)
 End Sub
 Sub ParseConfig
         Config_BackgroundColor = CVL(MapGetKey(Config$, "BackgroundColor"))
         Config_TextColor = CVL(MapGetKey(Config$, "TextColor"))
         If Len(Config_CurrentWorkspace) Then OpenWorkspace Config_CurrentWorkspace
         Config_FileSeperator = MapGetKey(Config$, "FileSeperator")
+        Config_OpenFileSpeed = CVL(MapGetKey(Config$, "OpenFileSpeed"))
 End Sub
 Sub WriteConfigFile
         CreateConfig
         If _FileExists("config.ini") Then Kill "config.ini"
         F = FreeFile
-        Open "config.ini" For Binary As #F
-        Put #F, , Config$
+        Open "config.ini" For Output As #F
+        Print #F, Config$;
         Close #F
 End Sub
 '------------------------------
@@ -418,7 +454,7 @@ Sub OpenFileTasks: Static As Long OpeningFileDialog, OpeningFile_FileNameLabel, 
         UI(OpeningFileDialog).Visible = 0
         For FileID = 1 To UBound(File)
                 If File(FileID).Opened Then _Continue
-                For J = 1 To 64
+                For J = 1 To Config_OpenFileSpeed
                         UI(OpeningFile_FileNameLabel).Label = File(FileID).Name
                         UI(OpeningFileDialog).Visible = -1
                         Line Input #File(FileID).FileID, L$
@@ -497,8 +533,8 @@ Sub PrintString (X As Integer, Y As Integer, S As String)
         _PrintString (X, Y), S
 End Sub
 Function GetLastPathName$ (Path$)
-        T~& = Max(_InStrRev(Path$, "/"), _InStrRev(Path$, "\"))
-        If T~& = 0 Then GetLastPathName$ = Path$ Else GetLastPathName$ = Mid$(Path$, T~&)
+        T~& = _InStrRev(Path$, FILE_SEPERATOR) + 1
+        GetLastPathName$ = Mid$(Path$, T~&)
 End Function
 Function GetKeyDown (__Key As _Unsigned Long)
         If __Key = 0 Then Exit Function
@@ -529,7 +565,7 @@ Function GetDirList$ (CurrentDirectory$)
         End If
         If Len(CurrentDirectory$) > 1 And Right$(CurrentDirectory$, 1) <> FILE_SEPERATOR Then CurrentDirectory$ = CurrentDirectory$ + FILE_SEPERATOR
         O$ = ListStringNew: B = 0
-        T = _ShellHide("dir /b /o:n /a:d " + Chr$(34) + CurrentDirectory$ + Chr$(34) + " > tmp.txt && echo.>> tmp.txt && dir /b /o:n /a:-d " + Chr$(34) + CurrentDirectory$ + Chr$(34) + " >> tmp.txt")
+        T = _ShellHide("dir /b /o:n /a:d " + Chr$(34) + CurrentDirectory$ + Chr$(34) + " > tmp.txt & echo.>> tmp.txt & dir /b /o:n /a:-d " + Chr$(34) + CurrentDirectory$ + Chr$(34) + " >> tmp.txt")
         __F = FreeFile: Open "tmp.txt" For Input As #__F: Do While Seek(__F) < LOF(__F)
                 Line Input #__F, L$: If L$ = " " Then B = 1: _Continue
                 If Left$(CurrentDirectory$, Len(_CWD$)) = _CWD$ And L$ = "tmp.txt" Then _Continue
@@ -581,6 +617,8 @@ Function UI_New (__Name As String, __Type As _Unsigned _Byte, __X As Integer, __
         UI(I).Key1_1 = 0
         UI(I).Key1_2 = 0
         UI(I).State = 0
+        UI(I).Scroll = 1
+        UI(I).MaxScroll = 0
         UI(I).TotalStates = 0
         If Len(__Content) Then If Asc(__Content) = 1 Then UI_ParseContent
         UI_New = I
@@ -686,9 +724,6 @@ Sub UI_Draw
                         If UI(UI(I).Parent).Visible = 0 Then _Continue
                 End If
                 Select Case __UI.Type And __UI.Visible
-                        Case UI_TYPE_Frame
-                                Line (__UI.__X, __UI.__Y)-(__UI.__X + __UI.__W, __UI.__Y + __UI.__H), __UI.BG, B
-
                         Case UI_TYPE_Label
                                 Line (__UI.__X, __UI.__Y)-(__UI.__X + __UI.__W, __UI.__Y + __UI.__H), __UI.BG, B
                                 PrintString __UI.__X, __UI.__Y + (__UI.__H - _FontHeight) / 2, __UI.Label
@@ -722,7 +757,7 @@ Sub UI_Draw
                                 PrintString __UI.__X, __UI.__Y, __UI.ParsedLabelUnderlined
                                 If UI_Focus = __UI.Parent And MouseInBox(__UI.__X, __UI.__Y, __UI.__X + __UI.__W, __UI.__Y + __UI.__H) And _MouseButton(1) Then UI_Focus = I: WaitForMouseButtonRelease
                                 If UI_Focus = I Then
-                                        Line (__UI.__X, __UI.__Y + __UI.__H)-(__UI.__X + __UI.MenuDialogWidth, __UI.__Y + __UI.__H + __UI.MenuDialogHeight), _RGB32(0, 191), BF
+                                        Line (__UI.__X, __UI.__Y + __UI.__H)-(__UI.__X + __UI.MenuDialogWidth, __UI.__Y + __UI.__H + __UI.MenuDialogHeight), _RGB32(0, 223), BF
                                         Line (__UI.__X + _FontWidth / 2, __UI.__Y + __UI.__H + _FontHeight / 2)-(__UI.__X + __UI.MenuDialogWidth - _FontWidth / 2, __UI.__Y + __UI.__H + __UI.MenuDialogHeight - _FontHeight / 2), _RGB32(255), B
                                         For J = 1 To ListStringLength(__UI.ParsedContent)
                                                 X1 = __UI.__X + _FontWidth
@@ -757,12 +792,10 @@ Sub UI_Draw
                                 _PutImage (__UI.__X, __UI.__Y)-(__UI.__X + __UI.__W, __UI.__Y + __UI.__H), __UI.Image
 
                         Case UI_TYPE_ScrollBar
-                                If UI_Focus = __UI.Parent And MouseInBox(__UI.__X, __UI.__Y, __UI.__X + __UI.__W, __UI.__Y + __UI.__H) And _MouseButton(1) Then UI_Focus = I: WaitForMouseButtonRelease
                                 Line (__UI.__X, __UI.__Y)-(__UI.__X + __UI.__W, __UI.__Y + __UI.__H), __UI.BG, BF
-                                __H = Clamp(16, __UI.__H / __UI.MaxScroll, __UI.__H)
-                                __Y = (__UI.__H - __H) * (__UI.Scroll - 1) / __UI.MaxScroll
-                                Line (__UI.__X + 1, __UI.__Y + __Y)-(__UI.__X + __UI.__W - 1, __UI.__Y + __Y + __H), _RGB32(255), BF
-                                If UI_Focus = __UI.Parent And MouseInBox(__UI.__X, __UI.__Y, __UI.__X + __UI.__W, __UI.__Y + __UI.__H) And _MouseButton(1) Then __UI.Scroll = (_MouseY - __UI.__Y - 8) * __UI.MaxScroll / __UI.__H
+                                If __UI.MaxScroll < 2 Then __Y = 0 Else __Y = (__UI.__H - 16) * (__UI.Scroll - 1) / (__UI.MaxScroll - 1)
+                                Line (__UI.__X + 1, __UI.__Y + __Y)-(__UI.__X + __UI.__W - 1, __UI.__Y + __Y + 16), _RGB32(255), BF
+                                If UI_Focus = __UI.Parent And MouseInBox(__UI.__X, __UI.__Y, __UI.__X + __UI.__W, __UI.__Y + __UI.__H) And _MouseButton(1) Then __UI.Scroll = Clamp(1, (_MouseY - __UI.__Y - 8) * __UI.MaxScroll / (__UI.__H - 16), __UI.MaxScroll): __UI.Response = -1
 
                         Case UI_TYPE_ToggleButton
                                 If MouseInBox(__UI.__X, __UI.__Y, __UI.__X + __UI.__W, __UI.__Y + __UI.__H) Then
@@ -778,7 +811,7 @@ Sub UI_Draw
                         Case UI_TYPE_ListView
                                 If MouseInBox(__UI.__X, __UI.__Y, __UI.__X + __UI.__W, __UI.__Y + __UI.__H) And _MouseButton(1) Then UI_Focus = __UI.Parent
                                 Line (__UI.__X, __UI.__Y)-(__UI.__X + __UI.__W, __UI.__Y + __UI.__H), __UI.FG, B
-                                __UI.Scroll = Clamp(1, __UI.Scroll + UI_MouseWheel, ListStringLength(__UI.ParsedContent))
+                                If UI_Focus = __UI.Parent Then __UI.Scroll = Clamp(1, __UI.Scroll + UI_MouseWheel, ListStringLength(__UI.ParsedContent))
                                 K = 0
                                 For J = Max(1, __UI.Scroll) To Min(__UI.Scroll + __UI.__H / _FontHeight - 1, ListStringLength(__UI.ParsedContent))
                                         X1 = __UI.__X + _FontWidth
@@ -794,7 +827,8 @@ Sub UI_Draw
                                                 End If
                                         End If
                                         If __UI.Selected = J Then Line (X1, Y1)-(X2, Y2), __UI.BG, BF
-                                        PrintString X1, Y1, ListStringGet(__UI.ParsedContent, J)
+                                        L$ = ListStringGet(__UI.ParsedContent, J)
+                                        If Len(L$) > _SHR(X2 - X1, 3) Then PrintString X1, Y1, Left$(L$, _SHR(X2 - X1, 3)) Else PrintString X1, Y1, L$
                                         K = K + _FontHeight
                                 Next J
 
@@ -810,6 +844,9 @@ Sub UI_Draw
                                         __UI.Response = KeyHit
                                 End If
                                 PrintString __UI.__X, __UI.__Y, __UI.Content + "_"
+
+                        Case UI_TYPE_Frame
+                                Line (__UI.__X, __UI.__Y)-(__UI.__X + __UI.__W, __UI.__Y + __UI.__H), __UI.BG, B
 
                 End Select
                 If (GetKeyDown(__UI.Key0_1) Or GetKeyDown(__UI.Key1_1)) And (GetKeyDown(__UI.Key0_2) Or GetKeyDown(__UI.Key1_2)) Then
