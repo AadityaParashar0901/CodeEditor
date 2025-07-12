@@ -32,7 +32,7 @@ End Type
 Const UI_TYPE_Label = 1, UI_TYPE_Button = 2, UI_TYPE_Dialog = 3, UI_TYPE_ProgressBar = 4, UI_TYPE_MenuButton = 5, UI_TYPE_Image = 6, UI_TYPE_ScrollBar = 7, UI_TYPE_ToggleButton = 8, UI_TYPE_ListView = 9, UI_TYPE_TextView = 10, UI_TYPE_Frame = 11
 Const UI_PROP_Center = 17
 Const UI_KEY_Visible = 33, UI_KEY_Focus = 34, UI_KEY_Visible_And_Focus = 35
-Dim Shared UI(0) As UI, UI_PARENT As _Unsigned Integer, UI_Focus_Parent As _Unsigned Integer, UI_Focus As _Unsigned Integer, UI_MouseWheel As Integer
+Dim Shared UI(0) As UI, UI_PARENT As _Unsigned Integer, UI_Focus_Parent As _Unsigned Integer, UI_Focus As _Unsigned Integer, UI_MouseWheel As Integer, KeyHit As Long
 '--------------------
 
 Dim Shared As String SaveFileQueue
@@ -70,14 +70,12 @@ UI_Side_Pane = UI_New("UI_Side_Pane", UI_TYPE_Frame, 0, 16, 128, -16, "", "")
 UI_Set_BG _RGB32(63)
 '---------------------------
 '-------- Open File Dialog --------
-UI_Dialog_OpenFile = UI_New("UI_Dialog_OpenFile", UI_TYPE_Dialog, 0, 0, -128, -128, "Open File", "")
-UI_Set_FG -1
-UI(UI_Dialog_OpenFile).Visible = 0
+Dim Shared As Integer UI_Dialog_OpenFile
+OpenFileDialog 'First Run
 '----------------------------------
 '-------- Save As Dialog --------
-UI_Dialog_SaveFileAs = UI_New("UI_Dialog_SaveFileAs", UI_TYPE_Dialog, 0, 0, -128, -128, "Save As File", "")
-UI_Set_FG -1
-UI(UI_Dialog_SaveFileAs).Visible = 0
+Dim Shared As Integer UI_Dialog_SaveFileAs
+SaveFileAsDialog 'First Run
 '--------------------------------
 
 Dim Shared As Long MainScreen, tmpScreen
@@ -110,7 +108,9 @@ Do
         _Limit 60
         CurrentFile = Clamp(LBound(File), CurrentFile, UBound(File))
         If CurrentFile Then SetTitle File(CurrentFile).Name + " - Code Editor" Else SetTitle "Code Editor"
+        UI_MouseWheel = 0
         While _MouseInput
+                UI_MouseWheel = UI_MouseWheel + _MouseWheel
                 File(CurrentFile).ScrollOffset = Clamp(1, File(CurrentFile).ScrollOffset + 3 * _MouseWheel, File(CurrentFile).TotalLines)
         Wend
 
@@ -128,7 +128,11 @@ Do
                 DrawText
         End If
         UI_Draw
-        If UI_Focus = 0 Then
+        If UI(UI_Dialog_OpenFile).Visible Then
+                OpenFileDialog
+        ElseIf UI(UI_Dialog_SaveFileAs).Visible Then
+
+        ElseIf UI_Focus = 0 And CurrentFile Then
                 If _MouseButton(1) And MouseInBox(0, 16, _Width - 9, _Height - 17) Then
                         If KeyAlt Then AddCursor _SHR(_MouseX - TextOffsetX, 3) + 1, _SHR(_MouseY - TextOffsetY, 4) + 1 Else SetCursor _SHR(_MouseX - TextOffsetX, 3) + 1, _SHR(_MouseY - TextOffsetY, 4) + 1
                 End If
@@ -189,11 +193,9 @@ Do
         End If
         _Display
         If UI(UI_MenuButton_File).Response = 1 Or (KeyCtrl And (KeyHit = 78 Or KeyHit = 110)) Then NewFile
-        If UI(UI_MenuButton_File).Response = 2 Or (KeyCtrl And (KeyHit = 79 Or KeyHit = 111)) Then UI(UI_Dialog_OpenFile).Visible = -1
+        If UI(UI_MenuButton_File).Response = 2 Or (KeyCtrl And (KeyHit = 79 Or KeyHit = 111)) Then UI(UI_Dialog_OpenFile).Visible = -1: UI_Focus = UI_Dialog_OpenFile
         If UI(UI_MenuButton_File).Response = 3 Or (KeyCtrl And (KeyHit = 83 Or KeyHit = 115)) Then SaveFile CurrentFile
-        If UI(UI_MenuButton_File).Response = 4 Then
-                UI(UI_Dialog_SaveFileAs).Visible = -1
-        End If
+        If UI(UI_MenuButton_File).Response = 4 Or (KeyCtrl And KeyShift And (KeyHit = 83 Or KeyHit = 115)) Then UI(UI_Dialog_SaveFileAs).Visible = -1: UI_Focus = UI_Dialog_SaveFileAs
         If UI(UI_MenuButton_File).Response = 5 Or (KeyCtrl And (KeyHit = 87 Or KeyHit = 119)) Then
                 EmptyRopePoints = EmptyRopePoints + File(CurrentFile).Content
                 For I = CurrentFile + 1 To UBound(File): Swap File(I), File(I - 1): Next I
@@ -254,6 +256,74 @@ Sub DeleteLine (CursorY As Long)
         File(CurrentFile).TotalLines = File(CurrentFile).TotalLines - 1
 End Sub
 
+Sub OpenFileDialog
+        Static UI_Dialog_OpenFile_ListView_Dir, UI_Dialog_OpenFile_TextView_Dir, UI_Dialog_OpenFile_Button_Open, UI_Dialog_OpenFile_Button_Cancel
+        Static CurrentDirectory As String
+        If UI_Dialog_OpenFile = 0 Then
+                UI_Dialog_OpenFile = UI_New("UI_Dialog_OpenFile", UI_TYPE_Dialog, 0, 0, -128, -128, "Open File", "")
+                UI_Set_FG -1
+                UI(UI_Dialog_OpenFile).Visible = 0
+                UI_PARENT = UI_Dialog_OpenFile
+                UI_Dialog_OpenFile_ListView_Dir = UI_New("UI_Dialog_OpenFile_ListView_Dir", UI_TYPE_ListView, 16, 64, -16, -32, "", "")
+                UI_Set_BG _RGB32(0, 191, 0)
+                UI_Dialog_OpenFile_TextView_Dir = UI_New("UI_Dialog_OpenFile_TextView_Dir", UI_TYPE_TextView, 16, 40, -16, 16, "", "")
+                UI_Dialog_OpenFile_Button_Open = UI_New("UI_Dialog_OpenFile_Button_Open", UI_TYPE_Button, -128, -24, 48, 16, " Open ", "")
+                UI_Dialog_OpenFile_Button_Cancel = UI_New("UI_Dialog_OpenFile_Button_Cancel", UI_TYPE_Button, -64, -24, 48, 16, "Cancel", "")
+                UI_PARENT = 0
+                CurrentDirectory = _StartDir$
+                Exit Sub
+        End If
+        Update = 0
+        If UI(UI_Dialog_OpenFile_TextView_Dir).Response = 13 Then
+                If _DirExists(UI(UI_Dialog_OpenFile_TextView_Dir).Content) Then
+                        CurrentDirectory = UI(UI_Dialog_OpenFile_TextView_Dir).Content
+                        Update = 1
+                ElseIf _FileExists(UI(UI_Dialog_OpenFile_TextView_Dir).Content) Then
+                        OpenFile UI(UI_Dialog_OpenFile_TextView_Dir).Content
+                        CurrentDirectory = UI(UI_Dialog_OpenFile_TextView_Dir).Content
+                        Update = 1
+                        UI(UI_Dialog_OpenFile).Visible = 0
+                        UI_Focus = 0
+                End If
+        End If
+        If Len(UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent) = 0 Then Update = 1
+        Select Case UI(UI_Dialog_OpenFile_ListView_Dir).Selected
+                Case 0
+                Case 1
+                        CurrentDirectory = PathBack$(CurrentDirectory)
+                        Update = 1
+                Case Else
+                        If _DirExists(CurrentDirectory + ListStringGet(UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent, UI(UI_Dialog_OpenFile_ListView_Dir).Selected)) Then
+                                CurrentDirectory = CurrentDirectory + ListStringGet(UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent, UI(UI_Dialog_OpenFile_ListView_Dir).Selected)
+                                Update = 1
+                        End If
+        End Select
+        If UI(UI_Dialog_OpenFile_Button_Open).Response Then
+                OpenFile CurrentDirectory + ListStringGet(UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent, UI(UI_Dialog_OpenFile_ListView_Dir).Selected)
+                Update = 1
+                UI(UI_Dialog_OpenFile).Visible = 0
+                UI_Focus = 0
+        End If
+        If UI(UI_Dialog_OpenFile_Button_Cancel).Response Then
+                UI(UI_Dialog_OpenFile).Visible = 0
+                UI_Focus = 0
+        End If
+        If Update Then
+                UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent = ListStringAppend(ListStringFromString(".."), GetDirList$(CurrentDirectory))
+                UI(UI_Dialog_OpenFile_ListView_Dir).Selected = 0
+                UI(UI_Dialog_OpenFile_TextView_Dir).Content = CurrentDirectory
+        End If
+End Sub
+Sub SaveFileAsDialog
+        If UI_Dialog_SaveFileAs = 0 Then
+                UI_Dialog_SaveFileAs = UI_New("UI_Dialog_SaveFileAs", UI_TYPE_Dialog, 0, 0, -128, -128, "Save As File", "")
+                UI_Set_FG -1
+                UI(UI_Dialog_SaveFileAs).Visible = 0
+                UI_PARENT = UI_Dialog_SaveFileAs
+                UI_PARENT = 0
+                Exit Sub
+        End If
+End Sub
 Sub DrawMenuBar
         Line (0, 0)-(_Width - 1, 16), _RGB32(0, 63, 127), BF
         If CurrentFile Then _PrintString (_Width - 8 * Len(File(CurrentFile).Name) - 16, 0), "[" + File(CurrentFile).Name + "]"
@@ -363,6 +433,7 @@ Sub OpenFileTasks: Static As Long OpeningFileDialog, OpeningFile_FileNameLabel, 
         Next FileID
 End Sub
 Sub SaveFile (I As Long)
+        If I = 0 Then Exit Sub
         SaveFileQueue = SaveFileQueue + MKL$(I)
         File(I).Saved = 0
         File(I).SaveOffset = 0
@@ -438,29 +509,32 @@ Function ceil& (t#)
         ceil& = t& + Sgn(t# - t&)
 End Function
 
+Function PathBack$ (Path$)
+        If Right$(Path$, 1) = FILE_SEPERATOR Then P$ = Left$(Path$, Len(Path$) - 1)
+        PathBack$ = Left$(Path$, _InStrRev(P$, FILE_SEPERATOR))
+End Function
 Function GetDirList$ (CurrentDirectory$)
-        If CurrentDirectory$ = "" Then
+        If CurrentDirectory$ = "" Or CurrentDirectory$ = "\" Then
                 $If WIN Then
                         O$ = ListStringNew
                         For I = 65 To 90
-                                If _DirExists(Chr$(I) + ":\") Then ListStringAdd O$, Chr$(I) + ":"
+                                If _DirExists(Chr$(I) + ":\") Then ListStringAdd O$, Chr$(I) + ":\"
                         Next I
                         GetDirList$ = O$
+                        CurrentDirectory$ = ""
                         Exit Function
                 $Else
                                 CurrentDirectory$ = "/"
                 $End If
         End If
-        O$ = ListStringNew
-        Shell "dir /b /o:n " + Chr$(34) + CurrentDirectory$ + Chr$(34) + " > tmp.txt"
-        __F = FreeFile
-        Open "tmp.txt" For Input As __F
-        Do
-                Line Input #__F, L$
-                ListStringAdd O$, L$
-        Loop Until EOF(__F)
-        Close #__F
-        Kill "tmp.txt"
+        If Len(CurrentDirectory$) > 1 And Right$(CurrentDirectory$, 1) <> FILE_SEPERATOR Then CurrentDirectory$ = CurrentDirectory$ + FILE_SEPERATOR
+        O$ = ListStringNew: B = 0
+        T = _ShellHide("dir /b /o:n /a:d " + Chr$(34) + CurrentDirectory$ + Chr$(34) + " > tmp.txt && echo.>> tmp.txt && dir /b /o:n /a:-d " + Chr$(34) + CurrentDirectory$ + Chr$(34) + " >> tmp.txt")
+        __F = FreeFile: Open "tmp.txt" For Input As #__F: Do While Seek(__F) < LOF(__F)
+                Line Input #__F, L$: If L$ = " " Then B = 1: _Continue
+                If Left$(CurrentDirectory$, Len(_CWD$)) = _CWD$ And L$ = "tmp.txt" Then _Continue
+                If B Then ListStringAdd O$, L$ Else ListStringAdd O$, L$ + FILE_SEPERATOR
+        Loop: Close #__F: Kill "tmp.txt"
         GetDirList$ = O$
 End Function
 Sub SetTitle (T$)
@@ -580,6 +654,7 @@ Sub UI_Draw
         Dim As _Unsigned Long __FG, __BG
         __FG = _DefaultColor
         __BG = _BackgroundColor
+        If UI_Focus > 0 Then If UI(UI_Focus).Visible = 0 Then UI_Focus = 0
         For I = 1 To UBound(UI)
                 UI(I).Response = 0
                 If UI(I).Parent = 0 Then
@@ -701,7 +776,7 @@ Sub UI_Draw
                                 PrintString __UI.__X, __UI.__Y, ListStringGet(__UI.Content, __UI.State + 1)
 
                         Case UI_TYPE_ListView
-                                If MouseInBox(__UI.__X, __UI.__Y, __UI.__X + __UI.__W, __UI.__Y + __UI.__H) And _MouseButton(1) Then UI_Focus = __UI.Parent: WaitForMouseButtonRelease
+                                If MouseInBox(__UI.__X, __UI.__Y, __UI.__X + __UI.__W, __UI.__Y + __UI.__H) And _MouseButton(1) Then UI_Focus = __UI.Parent
                                 Line (__UI.__X, __UI.__Y)-(__UI.__X + __UI.__W, __UI.__Y + __UI.__H), __UI.FG, B
                                 __UI.Scroll = Clamp(1, __UI.Scroll + UI_MouseWheel, ListStringLength(__UI.ParsedContent))
                                 K = 0
@@ -713,9 +788,9 @@ Sub UI_Draw
                                         If MouseInBox(X1, Y1, X2, Y2) Then
                                                 Line (X1, Y1)-(X2, Y2), __UI.BG, BF
                                                 If _MouseButton(1) Then
-                                                        WaitForMouseButtonRelease
                                                         __UI.Selected = J
                                                         __UI.Response = J
+                                                        WaitForMouseButtonRelease
                                                 End If
                                         End If
                                         If __UI.Selected = J Then Line (X1, Y1)-(X2, Y2), __UI.BG, BF
