@@ -194,10 +194,10 @@ Do
                                         CursorY = Min(CursorY + 1, File(CurrentFile).TotalLines)
                                         If CursorY > File(CurrentFile).ScrollOffset + VerticalLinesVisible Then File(CurrentFile).ScrollOffset = Max(1, CursorY - VerticalLinesVisible)
                                 Case 18688 'PgUp
-                                        CursorY = CursorY - VerticalLinesVisible
+                                        CursorY = Max(1, CursorY - VerticalLinesVisible)
                                         If CursorY < File(CurrentFile).ScrollOffset Then File(CurrentFile).ScrollOffset = CursorY
                                 Case 20736 'PgDn
-                                        CursorY = CursorY + VerticalLinesVisible
+                                        CursorY = Min(CursorY + VerticalLinesVisible, File(CurrentFile).TotalLines)
                                         If CursorY > File(CurrentFile).ScrollOffset + VerticalLinesVisible Then File(CurrentFile).ScrollOffset = Max(1, CursorY - VerticalLinesVisible)
                                 Case 18176 'Home
                                         If KeyCtrl Then
