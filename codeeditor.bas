@@ -18,7 +18,7 @@ Type File
         As _Unsigned _Byte Opened, Saved
 End Type
 Dim Shared File(0) As File, CurrentFile As Long
-Dim Shared Rope(0) As String, ParsedRope(0) As String, ColorRope(0) As String, EmptyRopePoints As String
+Dim Shared Rope(0) As String, EmptyRopePoints As String
 EmptyRopePoints = ""
 
 '-------- UI --------
@@ -361,8 +361,10 @@ Sub InsertText (T$, CursorX As Long, CursorY As Long)
         File(CurrentFile).Saved = 0
 End Sub
 Sub InsertLine (CursorY As Long)
+        Dim As Long RopeI
         File(CurrentFile).TotalLines = File(CurrentFile).TotalLines + 1
-        File(CurrentFile).Content = Left$(File(CurrentFile).Content, _SHL(CursorY - 1, 2)) + MKL$(GetNewRopePointer) + Mid$(File(CurrentFile).Content, _SHL(CursorY - 1, 2) + 1)
+        RopeI = GetNewRopePointer
+        File(CurrentFile).Content = Left$(File(CurrentFile).Content, _SHL(CursorY - 1, 2)) + MKL$(RopeI) + Mid$(File(CurrentFile).Content, _SHL(CursorY - 1, 2) + 1)
         UpdateRope RopeI
         File(CurrentFile).Saved = 0
 End Sub
@@ -391,13 +393,16 @@ Sub DeleteLine (CursorY As Long)
         File(CurrentFile).Saved = 0
 End Sub
 Sub UpdateRope (I As Long) Static
-        ParsedRope(I) = ""
-        For J = 1 To Len(Rope(I)): B~%% = Asc(Rope(I), J): Select Case B~%%
-                        Case 9: ParsedRope(I) = ParsedRope(I) + Space$(8)
-                        Case Else: ParsedRope(I) = ParsedRope(I) + Chr$(B~%%)
+        Dim As String ParsedRope
+        ParsedRope = ""
+        For J = 1 To Len(Rope(I))
+                B~%% = Asc(Rope(I), J)
+                Select Case B~%%
+                        Case 9: ParsedRope = ParsedRope + Space$(8)
+                        Case Else: ParsedRope = ParsedRope + Chr$(B~%%)
         End Select: Next J
-        Rope(I) = ParsedRope(I)
-        ParsedRope(I) = ""
+        Rope(I) = ParsedRope
+        ParsedRope = ""
 End Sub
 '---------------------------------
 
@@ -677,14 +682,10 @@ Function GetNewRopePointer&
         If Len(EmptyRopePoints) = 0 Then
                 I = UBound(Rope) + 1
                 ReDim _Preserve Rope(1 To I) As String
-                ReDim _Preserve ParsedRope(1 To I) As String
-                ReDim _Preserve ColorRope(1 To I) As String
                 GetNewRopePointer& = I
         Else
                 I = CVL(Left$(EmptyRopePoints, 4))
                 Rope(I) = ""
-                ParsedRope(I) = ""
-                ColorRope(I) = ""
                 EmptyRopePoints = Mid$(EmptyRopePoints, 5)
                 GetNewRopePointer& = I
         End If
