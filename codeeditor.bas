@@ -120,11 +120,13 @@ Do
                 tmpW = _ResizeWidth: tmpH = _ResizeHeight
                 If tmpW > 0 And tmpH > 0 Then tmpScreen = MainScreen: MainScreen = _NewImage(tmpW, tmpH, 32): Screen MainScreen: _FreeImage tmpScreen
         End If
-        For I = 1 To _TotalDroppedFiles
-                If _FileExists(_DroppedFile$(I)) Then INFILE$ = _DroppedFile$(I) Else INFILE$ = _StartDir$ + FILE_SEPERATOR + _DroppedFile$(I)
-                OpenFile INFILE$
-        Next I
-
+        If _TotalDroppedFiles Then
+                For I = 1 To _TotalDroppedFiles
+                        If _FileExists(_DroppedFile$(I)) Then INFILE$ = _DroppedFile$(I) Else INFILE$ = _StartDir$ + FILE_SEPERATOR + _DroppedFile$(I)
+                        OpenFile INFILE$
+                Next I
+                _FinishDrop
+        End If
         Cls , Config_BackgroundColor
         Color Config_TextColor, 0
         _Limit 60
