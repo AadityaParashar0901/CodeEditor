@@ -17,7 +17,7 @@ Type File
         As _Unsigned _Byte Opened, Saved
 End Type
 Dim Shared File(0) As File, CurrentFile As Long
-Dim Shared Rope(0) As String, EmptyRopePoints As String
+Dim Shared Rope(0) As String, EmptyRopePoints As String: EmptyRopePoints = ""
 
 '-------- UI --------
 Type UI
@@ -49,7 +49,7 @@ UI_Set_KeyMaps 100308, 70, 100307, 102
 UI_MenuButton_Workspace = UI_New("UI_MenuButton_Workspace", UI_TYPE_MenuButton, 48, 0, 88, 16, " Workspace ", ListStringFromString("\Open Workspace,\Save Workspace,\Close Workspace"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 87, 100307, 119
-UI_MenuButton_View = UI_New("UI_MenuButton_View", UI_TYPE_MenuButton, 136, 0, 48, 16, " View ", ListStringFromString("Go to \File,Go to \Line|Ctrl+G,\Toggle Side Pane|Alt+T"))
+UI_MenuButton_View = UI_New("UI_MenuButton_View", UI_TYPE_MenuButton, 136, 0, 48, 16, " View ", ListStringFromString("Go to \File,Go to \Line|Ctrl+G,\Toggle Side Pane|Alt+T,Toggle Summary Bar|Alt+B"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 86, 100307, 118
 UI_MenuButton_Cursors = UI_New("UI_MenuButton_Cursors", UI_TYPE_MenuButton, 184, 0, 72, 16, " Cursors ", ListStringFromString("Go to \Next Cursor|Alt+X,Set Cursor to Center|F8"))
@@ -59,8 +59,10 @@ Dim Shared As Integer FileChangeDialog
 '--------------------------
 '-------- Scroll Bar --------
 UI_ScrollBar_Text = UI_New("UI_ScrollBar_Text", UI_TYPE_ScrollBar, -8, 17, -1, -16, "", "")
+Dim Shared As Integer Summary_Bar
 '----------------------------
 '-------- Status Bar --------
+Dim Shared As Integer UI_Label_CursorPosition
 UI_ToggleButton_LineSeperator = UI_New("UI_ToggleButton_LineSeperator", UI_TYPE_ToggleButton, 16, -16, 48, 16, "", ListStringFromString("[CRLF],[  LF],[CR  ]"))
 Select Case Config_FileSeperator
         Case Chr$(13) + Chr$(10): UI(UI_ToggleButton_LineSeperator).State = 0
@@ -68,6 +70,7 @@ Select Case Config_FileSeperator
         Case Chr$(13): UI(UI_ToggleButton_LineSeperator).State = 2
 End Select
 UI_Set_BG _RGB32(0, 191, 0)
+UI_Label_CursorPosition = UI_New("UI_Label_CursorPosition", UI_TYPE_Label, 96, -16, 128, 16, "Cursor: 0 0", "")
 '----------------------------
 '-------- Draw Text --------
 Dim Shared As Long VerticalLinesVisible, HorizontalCharsVisible
@@ -124,6 +127,7 @@ Do
                 UI_MouseWheel = UI_MouseWheel + _MouseWheel
                 If UI_Focus = 0 Then File(CurrentFile).ScrollOffset = Clamp(1, File(CurrentFile).ScrollOffset + 3 * _MouseWheel, File(CurrentFile).TotalLines)
         Wend
+        If UI_MouseWheel Then MoveScrollToCursor -1
 
         OpenFileTasks: SaveFileTasks
 
@@ -136,7 +140,9 @@ Do
         DrawStatusBar
         If CurrentFile Then
                 TextOffsetX = UI(UI_Side_Pane).W + 8 * ceil(Log(Max(1, File(CurrentFile).TotalLines)) / Log(10) + 2)
+                MoveScrollToCursor 0
                 DrawText
+                If Summary_Bar Then DrawSummaryBar
         End If
         If UI(UI_Dialog_OpenFile).Visible Then
                 OpenFileDialog
@@ -160,19 +166,23 @@ Do
                         If Len(K$) Then
                                 Select Case Asc(K$)
                                         Case 8: DeleteText 1, CursorX, CursorY: BoundCursor = True
-                                        Case 13: If CursorX = Len(Rope(RopeI)) + 1 Then
+                                        Case 9: Rope(RopeI) = Rope(RopeI) + Space$(Len(Rope(RopeI)) Mod 8)
+                                        Case 13: S$ = Left$(Rope(RopeI), Len(Rope(RopeI)) - Len(LTrim$(Rope(RopeI))))
+                                                If CursorX = Len(Rope(RopeI)) + 1 Then
                                                         InsertLine CursorY + 1
-                                                        CursorX = 1
+                                                        CursorX = Len(S$) + 1
                                                         CursorY = CursorY + 1
+                                                        RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
+                                                        Rope(RopeI) = S$
                                                 Else
                                                         InsertLine CursorY + 1
                                                         T$ = Mid$(Rope(RopeI), CursorX)
                                                         Rope(RopeI) = Left$(Rope(RopeI), CursorX - 1)
-                                                        CursorY = CursorY + 1: CursorX = 1
+                                                        CursorY = CursorY + 1: CursorX = Len(S$) + 1
                                                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
-                                                        Rope(RopeI) = T$
+                                                        Rope(RopeI) = S$ + T$
                                                 End If
-                                        Case 32 To 126: InsertText K$, CursorX, CursorY: BoundCursor = True
+                                        Case 32 To 126: If KeyCtrl = 0 And KeyAlt = 0 Then InsertText K$, CursorX, CursorY: BoundCursor = True
                                 End Select
                         End If
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
@@ -182,38 +192,54 @@ Do
                                 CursorY = Clamp(1, CursorY, File(CurrentFile).TotalLines)
                                 ShowCursorTime = Timer(0.1) + 1
                         End If
-                        Select Case KeyHit
+                        Select EveryCase KeyHit
                                 Case 19200 'Left
                                         CursorX = Max(CursorX - 1, 1)
                                 Case 19712 'Right
                                         CursorX = Min(CursorX + 1, Len(Rope(RopeI)) + 1)
                                 Case 18432 'Up
-                                        CursorY = Max(CursorY - 1, 1)
-                                        If CursorY < File(CurrentFile).ScrollOffset Then File(CurrentFile).ScrollOffset = CursorY
+                                        If KeyCtrl Then
+                                                File(CurrentFile).ScrollOffset = Min(File(CurrentFile).ScrollOffset - 1, File(CurrentFile).TotalLines)
+                                        Else
+                                                CursorY = Max(CursorY - 1, 1)
+                                                If CursorY < File(CurrentFile).ScrollOffset Then File(CurrentFile).ScrollOffset = CursorY
+                                        End If
                                 Case 20480 'Down
-                                        CursorY = Min(CursorY + 1, File(CurrentFile).TotalLines)
-                                        If CursorY > File(CurrentFile).ScrollOffset + VerticalLinesVisible Then File(CurrentFile).ScrollOffset = Max(1, CursorY - VerticalLinesVisible)
+                                        If KeyCtrl Then
+                                                File(CurrentFile).ScrollOffset = Max(1, File(CurrentFile).ScrollOffset + 1)
+                                        Else
+                                                CursorY = Min(CursorY + 1, File(CurrentFile).TotalLines)
+                                                If CursorY > File(CurrentFile).ScrollOffset + VerticalLinesVisible Then File(CurrentFile).ScrollOffset = Max(1, CursorY - VerticalLinesVisible)
+                                        End If
                                 Case 18688 'PgUp
                                         CursorY = Max(1, CursorY - VerticalLinesVisible)
                                         If CursorY < File(CurrentFile).ScrollOffset Then File(CurrentFile).ScrollOffset = CursorY
                                 Case 20736 'PgDn
                                         CursorY = Min(CursorY + VerticalLinesVisible, File(CurrentFile).TotalLines)
                                         If CursorY > File(CurrentFile).ScrollOffset + VerticalLinesVisible Then File(CurrentFile).ScrollOffset = Max(1, CursorY - VerticalLinesVisible)
+                                Case 19200, 19712, 18432, 20480, 18688, 19712: MoveScrollToCursor -1
                                 Case 18176 'Home
                                         If KeyCtrl Then
-                                                SetCursor 1, 1
+                                                CursorX = 1: CursorY = 1
+                                                MoveScrollToCursor 1
                                         Else
                                                 CursorX = 1
                                         End If
                                 Case 20224 'End
                                         If KeyCtrl Then
-                                                SetCursor 1, File(CurrentFile).TotalLines
+                                                CursorX = 1
+                                                CursorY = File(CurrentFile).TotalLines
+                                                MoveScrollToCursor File(CurrentFile).TotalLines
                                         Else
                                                 CursorX = Len(Rope(RopeI)) + 1
+                                        End If
+                                Case 75, 107: If KeyCtrl Then
+                                                DeleteLine CursorY
                                         End If
                         End Select
                         Mid$(File(CurrentFile).Cursors, I, 4) = MKL$(CursorX)
                         Mid$(File(CurrentFile).Cursors, I + 4, 4) = MKL$(CursorY)
+                        If I = 1 Then UI(UI_Label_CursorPosition).Label = "Cursor:" + Str$(CursorX) + Str$(CursorY)
                         'Display Cursor
                         If ShowCursor = 0 And Timer(0.1) > ShowCursorTime Then _Continue
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
@@ -233,7 +259,7 @@ Do
         'Open File
         If UI(UI_MenuButton_File).Response = 2 Or (KeyCtrl And (KeyHit = 79 Or KeyHit = 111)) Then UI(UI_Dialog_OpenFile).Visible = -1: UI_Focus = UI_Dialog_OpenFile
         'Save File
-        If UI(UI_MenuButton_File).Response = 3 Or (KeyCtrl And (KeyHit = 83 Or KeyHit = 115)) Then SaveFile CurrentFile
+        If UI(UI_MenuButton_File).Response = 3 Or (KeyCtrl And KeyShift = 0 And (KeyHit = 83 Or KeyHit = 115)) Then SaveFile CurrentFile
         'Save As File
         If UI(UI_MenuButton_File).Response = 4 Or (KeyCtrl And KeyShift And (KeyHit = 83 Or KeyHit = 115)) Then UI(UI_Dialog_SaveFileAs).Visible = -1: UI_Focus = UI_Dialog_SaveFileAs
         'Close File
@@ -246,10 +272,13 @@ Do
         If UI(UI_MenuButton_View).Response = 2 Or (KeyCtrl And (KeyHit = 71 Or KeyHit = 103)) Then UI(UI_Dialog_GoToLine).Visible = -1: UI_Focus = UI_Dialog_GoToLine
         'Toggle Side Pane
         If UI(UI_MenuButton_View).Response = 3 Or (KeyAlt And (KeyHit = 84 Or KeyHit = 116)) Then UI(UI_Side_Pane).W = 144 - UI(UI_Side_Pane).W
+        'Toggle Summary Bar
+        If UI(UI_MenuButton_View).Response = 4 Or (KeyAlt And (KeyHit = 66 Or KeyHit = 98)) Then Summary_Bar = 1 - Summary_Bar
         'Go to Next Cursor
-        If UI(UI_MenuButton_Cursors).Response = 1 Or (KeyAlt And (KeyHit = 88 Or KeyHit = 120)) Then
+        If UI(UI_MenuButton_Cursors).Response = 1 Or UI(UI_Label_CursorPosition).Response Or (KeyAlt And (KeyHit = 88 Or KeyHit = 120)) Then
                 File(CurrentFile).CurrentCursor = ClampCycle(1, File(CurrentFile).CurrentCursor + 1, _SHR(Len(File(CurrentFile).Cursors), 3))
                 File(CurrentFile).ScrollOffset = CVL(Mid$(File(CurrentFile).Cursors, _SHL(File(CurrentFile).CurrentCursor, 3) - 3, 4))
+                UI_Focus = 0
         End If
         'Set Cursor to Center
         If UI(UI_MenuButton_Cursors).Response = 2 Or (KeyHit = 16896) Then
@@ -278,6 +307,15 @@ Sub AddCursor (X As Long, Y As Long)
 End Sub
 Sub SetCursor (X As Long, Y As Long)
         File(CurrentFile).Cursors = MKL$(Max(1, X)) + MKL$(Clamp(1, Y, File(CurrentFile).TotalLines))
+End Sub
+Sub MoveScrollToCursor (Y As Long)
+        Static DestY As Long
+        If Y Then DestY = Y
+        If Y = -1 Then DestY = 0
+        If DestY = 0 Then Exit Sub
+        D = DestY - File(CurrentFile).ScrollOffset
+        File(CurrentFile).ScrollOffset = File(CurrentFile).ScrollOffset + Sgn(D) * CeilDiv2(Abs(D), 2)
+        If D = 0 Then DestY = 0
 End Sub
 '----------------------------------
 
@@ -429,17 +467,20 @@ Sub DrawMenuBar
                 If MouseInBox(_Width - 8 * Len(File(CurrentFile).Name) - 16, 0, _Width, 16) And _MouseButton(1) Then UI(FileChangeDialog).Visible = -1: UI_Focus = FileChangeDialog: WaitForMouseButtonRelease
         End If
 End Sub
+Sub DrawSummaryBar
+
+End Sub
 Sub DrawStatusBar
         Line (0, _Height - 16)-(_Width - 1, _Height - 1), _RGB32(0, 63, 127), BF
 End Sub
 Sub DrawText
         VerticalLinesVisible = _SHR(_Height - 32, 4) - 1
-        HorizontalCharsVisible = _SHR(_Width - TextOffsetX, 3)
+        HorizontalCharsVisible = _SHR(_Width - TextOffsetX, 3) - Summary_Bar * 8
         J = TextOffsetY
         For I = File(CurrentFile).ScrollOffset To Min(File(CurrentFile).ScrollOffset + VerticalLinesVisible, File(CurrentFile).TotalLines)
                 K = CVL(Mid$(File(CurrentFile).Content, I * 4 - 3, 4))
                 L$ = _Trim$(Str$(I))
-                L$ = Space$(_SHR(TextOffsetX, 3) - Len(L$) - 1) + L$ + Chr$(179) + Rope(K)
+                L$ = Space$(_SHR(TextOffsetX, 3) - Len(L$) - 1) + L$ + Chr$(179) + Left$(Rope(K), HorizontalCharsVisible)
                 _PrintString (0, J), L$
                 J = J + 16
         Next I
@@ -509,13 +550,14 @@ Sub OpenFile (File$)
         If F = 0 Then File(FileID).Content = MKL$(GetNewRopePointer) Else File(FileID).Content = ""
         File(FileID).ScrollOffset = 1
 End Sub
-Sub OpenFileTasks: Static As Long OpeningFileDialog, OpeningFile_FileNameLabel, OpeningFile_Progress
+Sub OpenFileTasks: Static As Long OpeningFileDialog, OpeningFile_FileNameLabel, OpeningFile_Progress, OpeningFile_Cancel
         If OpeningFileDialog = 0 Then
-                OpeningFileDialog = UI_New("Dialog_OpeningFile", UI_TYPE_Dialog, 0, 0, 256, 64, "Opening File", "")
+                OpeningFileDialog = UI_New("Dialog_OpeningFile", UI_TYPE_Dialog, 0, 0, 256, 80, "Opening File", "")
                 UI(OpeningFileDialog).Visible = 0
                 UI_PARENT = OpeningFileDialog
                 OpeningFile_FileNameLabel = UI_New("Dialog_OpeningFile_Label", UI_TYPE_Label, 16, 24, 224, 16, "", "")
-                OpeningFile_Progress = UI_New("Dialog_OpeningFile_Progress", UI_TYPE_ProgressBar, 16, 48, 224, 4, "", "")
+                OpeningFile_Progress = UI_New("Dialog_OpeningFile_Progress", UI_TYPE_ProgressBar, 16, 42, 224, 4, "", "")
+                OpeningFile_Cancel = UI_New("Dialog_OpeningFile_Cancel", UI_TYPE_Button, 16, 48, 224, 16, "Cancel", "")
                 UI_PARENT = 0
         End If
 
@@ -534,6 +576,7 @@ Sub OpenFileTasks: Static As Long OpeningFileDialog, OpeningFile_FileNameLabel, 
                         UI(OpeningFile_Progress).Progress = Seek(File(FileID).FileID) / LOF(File(FileID).FileID)
                         If Seek(File(FileID).FileID) > LOF(File(FileID).FileID) Then Close #File(FileID).FileID: File(FileID).Opened = 1: Exit For
                 Next J
+                If UI(OpeningFile_Cancel).Response Then File(FileID).Opened = 1: UI_Focus = 0
         Next FileID
 End Sub
 Sub SaveFile (I As Long)
@@ -559,7 +602,7 @@ Sub SaveFileTasks: Static As Long SavingFileDialog, SavingFile_FileNameLabel, Sa
         UI(SavingFileDialog).Visible = -1
         UI(SavingFile_FileNameLabel).Label = File(FileID).Name
         If File(FileID).Saved = 0 Then
-                For J = 1 To 64
+                For J = 1 To Config_OpenFileSpeed
                         File(FileID).SaveOffset = File(FileID).SaveOffset + 1
                         If File(FileID).SaveOffset > File(FileID).TotalLines Then Exit For
                         RopeI = CVL(Mid$(File(FileID).Content, _SHL(File(FileID).SaveOffset, 2) - 3, 4))
@@ -800,6 +843,10 @@ Sub UI_Draw
                 Select Case __UI.Type And __UI.Visible
                         Case UI_TYPE_Label
                                 Line (__UI.__X, __UI.__Y)-(__UI.__X + __UI.__W, __UI.__Y + __UI.__H), __UI.BG, B
+                                If MouseInBox(__UI.__X, __UI.__Y, __UI.__X + __UI.__W, __UI.__Y + __UI.__H) Then
+                                        Line (__UI.__X, __UI.__Y)-(__UI.__X + __UI.__W, __UI.__Y + __UI.__H), __UI.BG, BF
+                                        If _MouseButton(1) Then __UI.Response = -1: WaitForMouseButtonRelease
+                                End If
                                 PrintString __UI.__X, __UI.__Y + (__UI.__H - _FontHeight) / 2, __UI.Label
 
                         Case UI_TYPE_Button
@@ -954,6 +1001,16 @@ Function ClampCycleDifference (A, B, C)
 End Function
 Function InRange (A, B, C)
         InRange = (A <= B) And (B <= C)
+End Function
+Function CeilDiv (A As Long, B As Integer)
+        Static D As Long
+        D = A \ B
+        CeilDiv = D + (A - D * B)
+End Function
+Function CeilDiv2 (A As Long, B As _Byte)
+        Static D As Long
+        D = _SHR(A, B)
+        CeilDiv2 = D + (A - _SHL(D, B))
 End Function
 Function ListStringNew$
         ListStringNew$ = Chr$(1) + MKL$(0)
