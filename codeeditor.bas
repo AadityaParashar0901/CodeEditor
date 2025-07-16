@@ -13,11 +13,12 @@ $End If
 Type File
         As String Name, Path, Content, Cursors
         As _Unsigned Long TotalLines, CurrentCursor
-        As Long ScrollOffset, FileID, SaveOffset
+        As Long ScrollOffset, FileID, SaveOffset, HorizontalScrollOffset
         As _Unsigned _Byte Opened, Saved
 End Type
 Dim Shared File(0) As File, CurrentFile As Long
-Dim Shared Rope(0) As String, EmptyRopePoints As String: EmptyRopePoints = ""
+Dim Shared Rope(0) As String, ParsedRope(0) As String, ColorRope(0) As String, EmptyRopePoints As String
+EmptyRopePoints = ""
 
 '-------- UI --------
 Type UI
@@ -98,6 +99,8 @@ Screen MainScreen
 Do Until _ScreenExists: Loop
 While _Resize: Wend
 
+_AcceptFileDrop
+
 Color Config_TextColor, 0
 
 If _CommandCount Then
@@ -116,12 +119,24 @@ Do
                 tmpW = _ResizeWidth: tmpH = _ResizeHeight
                 If tmpW > 0 And tmpH > 0 Then tmpScreen = MainScreen: MainScreen = _NewImage(tmpW, tmpH, 32): Screen MainScreen: _FreeImage tmpScreen
         End If
+        For I = 1 To _TotalDroppedFiles
+                If _FileExists(_DroppedFile$) Then INFILE$ = _DroppedFile$ Else INFILE$ = _StartDir$ + FILE_SEPERATOR + _DroppedFile$
+                OpenFile INFILE$
+        Next I
 
         Cls , Config_BackgroundColor
         Color Config_TextColor, 0
         _Limit 60
         CurrentFile = Clamp(LBound(File), CurrentFile, UBound(File))
-        If CurrentFile Then SetTitle File(CurrentFile).Name + " - Code Editor" Else SetTitle "Code Editor"
+        If CurrentFile Then
+                If File(CurrentFile).Saved = 0 Then
+                        SetTitle "*" + File(CurrentFile).Name + " - Code Editor"
+                Else
+                        SetTitle File(CurrentFile).Name + " - Code Editor"
+                End If
+        Else
+                SetTitle "Code Editor"
+        End If
         UI_MouseWheel = 0
         While _MouseInput
                 UI_MouseWheel = UI_MouseWheel + _MouseWheel
@@ -166,7 +181,7 @@ Do
                         If Len(K$) Then
                                 Select Case Asc(K$)
                                         Case 8: DeleteText 1, CursorX, CursorY: BoundCursor = True
-                                        Case 9: Rope(RopeI) = Rope(RopeI) + Space$(Len(Rope(RopeI)) Mod 8)
+                                        Case 9: InsertText Space$(8), CursorX, CursorY: BoundCursor = True
                                         Case 13: S$ = Left$(Rope(RopeI), Len(Rope(RopeI)) - Len(LTrim$(Rope(RopeI))))
                                                 If CursorX = Len(Rope(RopeI)) + 1 Then
                                                         InsertLine CursorY + 1
@@ -194,9 +209,17 @@ Do
                         End If
                         Select EveryCase KeyHit
                                 Case 19200 'Left
-                                        CursorX = Max(CursorX - 1, 1)
+                                        If KeyCtrl Then
+                                                File(CurrentFile).HorizontalScrollOffset = Max(1, File(CurrentFile).HorizontalScrollOffset - 1)
+                                        Else
+                                                CursorX = Max(CursorX - 1, 1)
+                                        End If
                                 Case 19712 'Right
-                                        CursorX = Min(CursorX + 1, Len(Rope(RopeI)) + 1)
+                                        If KeyCtrl Then
+                                                File(CurrentFile).HorizontalScrollOffset = Min(File(CurrentFile).HorizontalScrollOffset + 1, Len(Rope(RopeI)) + 1)
+                                        Else
+                                                CursorX = Min(CursorX + 1, Len(Rope(RopeI)) + 1)
+                                        End If
                                 Case 18432 'Up
                                         If KeyCtrl Then
                                                 File(CurrentFile).ScrollOffset = Min(File(CurrentFile).ScrollOffset - 1, File(CurrentFile).TotalLines)
@@ -225,6 +248,7 @@ Do
                                         Else
                                                 CursorX = 1
                                         End If
+                                        File(CurrentFile).HorizontalScrollOffset = 1
                                 Case 20224 'End
                                         If KeyCtrl Then
                                                 CursorX = 1
@@ -233,8 +257,13 @@ Do
                                         Else
                                                 CursorX = Len(Rope(RopeI)) + 1
                                         End If
+                                        File(CurrentFile).HorizontalScrollOffset = 1
                                 Case 75, 107: If KeyCtrl Then
                                                 DeleteLine CursorY
+                                                File(CurrentFile).HorizontalScrollOffset = 1
+                                        End If
+                                Case 86, 118: If KeyCtrl Then
+                                                InsertText _Clipboard$, CursorX, CursorY
                                         End If
                         End Select
                         Mid$(File(CurrentFile).Cursors, I, 4) = MKL$(CursorX)
@@ -243,11 +272,12 @@ Do
                         'Display Cursor
                         If ShowCursor = 0 And Timer(0.1) > ShowCursorTime Then _Continue
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
-                        X = TextOffsetX + _SHL(Min(CursorX, Len(Rope(RopeI)) + 1) - 1, 3)
+                        X = TextOffsetX + _SHL(Min(CursorX, Len(Rope(RopeI)) + 2 - File(CurrentFile).HorizontalScrollOffset) - 1, 3)
                         Y = TextOffsetY + _SHL(CursorY - File(CurrentFile).ScrollOffset, 4)
                         Line (X, Y)-(X + 7, Y + 15), -1, B
                 Next I
                 Select Case KeyHit
+                        Case 9: If KeyCtrl Then CurrentFile = ClampCycle(LBound(File), CurrentFile + 1, UBound(File)) 'Ctrl Tab
                         Case 16384: 'F6
                                 CurrentFile = ClampCycle(LBound(File), CurrentFile + 1, UBound(File))
                 End Select
@@ -323,11 +353,15 @@ End Sub
 Sub InsertText (T$, CursorX As Long, CursorY As Long)
         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
         Rope(RopeI) = Left$(Rope(RopeI), CursorX - 1) + T$ + Mid$(Rope(RopeI), CursorX)
-        CursorX = CursorX + 1
+        CursorX = CursorX + Len(T$)
+        UpdateRope RopeI
+        File(CurrentFile).Saved = 0
 End Sub
 Sub InsertLine (CursorY As Long)
         File(CurrentFile).TotalLines = File(CurrentFile).TotalLines + 1
         File(CurrentFile).Content = Left$(File(CurrentFile).Content, _SHL(CursorY - 1, 2)) + MKL$(GetNewRopePointer) + Mid$(File(CurrentFile).Content, _SHL(CursorY - 1, 2) + 1)
+        UpdateRope RopeI
+        File(CurrentFile).Saved = 0
 End Sub
 Sub DeleteText (Count As Long, CursorX As Long, CursorY As Long)
         For I = 1 To Count
@@ -344,11 +378,24 @@ Sub DeleteText (Count As Long, CursorX As Long, CursorY As Long)
                         CursorX = CursorX - 1
                 End If
         Next I
+        UpdateRope RopeI
+        File(CurrentFile).Saved = 0
 End Sub
 Sub DeleteLine (CursorY As Long)
         EmptyRopePoints = EmptyRopePoints + Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4)
         File(CurrentFile).Content = Left$(File(CurrentFile).Content, _SHL(CursorY - 1, 2)) + Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) + 1)
         File(CurrentFile).TotalLines = File(CurrentFile).TotalLines - 1
+        UpdateRope RopeI
+        File(CurrentFile).Saved = 0
+End Sub
+Sub UpdateRope (I As Long) Static
+        ParsedRope(I) = ""
+        For J = 1 To Len(Rope(I)): B~%% = Asc(Rope(I), J): Select Case B~%%
+                        Case 9: ParsedRope(I) = ParsedRope(I) + Space$(8)
+                        Case Else: ParsedRope(I) = ParsedRope(I) + Chr$(B~%%)
+        End Select: Next J
+        Rope(I) = ParsedRope(I)
+        ParsedRope(I) = ""
 End Sub
 '---------------------------------
 
@@ -480,7 +527,8 @@ Sub DrawText
         For I = File(CurrentFile).ScrollOffset To Min(File(CurrentFile).ScrollOffset + VerticalLinesVisible, File(CurrentFile).TotalLines)
                 K = CVL(Mid$(File(CurrentFile).Content, I * 4 - 3, 4))
                 L$ = _Trim$(Str$(I))
-                L$ = Space$(_SHR(TextOffsetX, 3) - Len(L$) - 1) + L$ + Chr$(179) + Left$(Rope(K), HorizontalCharsVisible)
+                T$ = Mid$(Rope(K), File(CurrentFile).HorizontalScrollOffset)
+                L$ = Space$(_SHR(TextOffsetX, 3) - Len(L$) - 1) + L$ + Chr$(179) + Left$(T$, HorizontalCharsVisible)
                 _PrintString (0, J), L$
                 J = J + 16
         Next I
@@ -538,6 +586,7 @@ Sub NewFile
         File(FileID).Opened = 1: File(FileID).Saved = 0
         File(FileID).Content = MKL$(GetNewRopePointer)
         File(FileID).ScrollOffset = 1
+        File(FileID).HorizontalScrollOffset = 1
 End Sub
 Sub OpenFile (File$)
         F = 0: If _FileExists(File$) Then F = FreeFile: Open File$ For Input As #F
@@ -549,6 +598,7 @@ Sub OpenFile (File$)
         File(FileID).Opened = 1 - Sgn(F): File(FileID).Saved = Sgn(F)
         If F = 0 Then File(FileID).Content = MKL$(GetNewRopePointer) Else File(FileID).Content = ""
         File(FileID).ScrollOffset = 1
+        File(FileID).HorizontalScrollOffset = 1
 End Sub
 Sub OpenFileTasks: Static As Long OpeningFileDialog, OpeningFile_FileNameLabel, OpeningFile_Progress, OpeningFile_Cancel
         If OpeningFileDialog = 0 Then
@@ -570,6 +620,7 @@ Sub OpenFileTasks: Static As Long OpeningFileDialog, OpeningFile_FileNameLabel, 
                         Line Input #File(FileID).FileID, L$
                         I = GetNewRopePointer
                         Rope(I) = L$
+                        UpdateRope I
                         File(FileID).TotalLines = File(FileID).TotalLines + 1
                         If Len(File(FileID).Content) < File(FileID).TotalLines * 4 + 4 Then File(FileID).Content = File(FileID).Content + String$(1024, 0)
                         Mid$(File(FileID).Content, File(FileID).TotalLines * 4 - 3, 4) = MKL$(I)
@@ -611,6 +662,7 @@ Sub SaveFileTasks: Static As Long SavingFileDialog, SavingFile_FileNameLabel, Sa
                 UI(SavingFile_Progress).Progress = File(FileID).SaveOffset / File(FileID).TotalLines
         End If
         If File(FileID).SaveOffset < File(FileID).TotalLines Then Exit Sub
+        File(FileID).Saved = 1
         SaveFileQueue = Mid$(SaveFileQueue, 5)
         Close #File(FileID).FileID
 End Sub
@@ -623,11 +675,16 @@ Function GetNewRopePointer&
         If Len(EmptyRopePoints) = 0 Then
                 I = UBound(Rope) + 1
                 ReDim _Preserve Rope(1 To I) As String
+                ReDim _Preserve ParsedRope(1 To I) As String
+                ReDim _Preserve ColorRope(1 To I) As String
                 GetNewRopePointer& = I
         Else
-                GetNewRopePointer& = CVL(Left$(EmptyRopePoints, 4))
-                Rope(CVL(Left$(EmptyRopePoints, 4))) = ""
+                I = CVL(Left$(EmptyRopePoints, 4))
+                Rope(I) = ""
+                ParsedRope(I) = ""
+                ColorRope(I) = ""
                 EmptyRopePoints = Mid$(EmptyRopePoints, 5)
+                GetNewRopePointer& = I
         End If
 End Function
 '---------------------------------
