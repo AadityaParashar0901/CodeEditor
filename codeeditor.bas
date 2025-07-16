@@ -1,4 +1,5 @@
 '$Dynamic
+$ExeIcon:'./codeeditor.ico'
 $Resize:On
 DefLng A-Z
 
