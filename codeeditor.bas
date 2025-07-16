@@ -121,7 +121,7 @@ Do
                 If tmpW > 0 And tmpH > 0 Then tmpScreen = MainScreen: MainScreen = _NewImage(tmpW, tmpH, 32): Screen MainScreen: _FreeImage tmpScreen
         End If
         For I = 1 To _TotalDroppedFiles
-                If _FileExists(_DroppedFile$) Then INFILE$ = _DroppedFile$ Else INFILE$ = _StartDir$ + FILE_SEPERATOR + _DroppedFile$
+                If _FileExists(_DroppedFile$(I)) Then INFILE$ = _DroppedFile$(I) Else INFILE$ = _StartDir$ + FILE_SEPERATOR + _DroppedFile$(I)
                 OpenFile INFILE$
         Next I
 
