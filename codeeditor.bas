@@ -378,17 +378,16 @@ Sub DeleteText (Count As Long, CursorX As Long, CursorY As Long)
                 Else
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
                         Rope(RopeI) = Left$(Rope(RopeI), CursorX - 2) + Mid$(Rope(RopeI), CursorX)
+                        UpdateRope RopeI
                         CursorX = CursorX - 1
                 End If
         Next I
-        UpdateRope RopeI
         File(CurrentFile).Saved = 0
 End Sub
 Sub DeleteLine (CursorY As Long)
         EmptyRopePoints = EmptyRopePoints + Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4)
         File(CurrentFile).Content = Left$(File(CurrentFile).Content, _SHL(CursorY - 1, 2)) + Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) + 1)
         File(CurrentFile).TotalLines = File(CurrentFile).TotalLines - 1
-        UpdateRope RopeI
         File(CurrentFile).Saved = 0
 End Sub
 Sub UpdateRope (I As Long) Static
