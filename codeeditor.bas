@@ -261,9 +261,12 @@ Do
                                                 CursorX = Len(Rope(RopeI)) + 1
                                         End If
                                         File(CurrentFile).HorizontalScrollOffset = 1
-                                Case 75, 107: If KeyCtrl Then
+                                Case 21248 'Delete
+                                        If KeyCtrl Then
                                                 DeleteLine CursorY
                                                 File(CurrentFile).HorizontalScrollOffset = 1
+                                        Else
+                                                DeleteText 1, CursorX + 1, CursorY
                                         End If
                                 Case 86, 118: If KeyCtrl Then
                                                 InsertText _Clipboard$, CursorX, CursorY
