@@ -225,14 +225,14 @@ Do
                                         End If
                                 Case 18432 'Up
                                         If KeyCtrl Then
-                                                File(CurrentFile).ScrollOffset = Min(File(CurrentFile).ScrollOffset - 1, File(CurrentFile).TotalLines)
+                                                File(CurrentFile).ScrollOffset = Max(1, File(CurrentFile).ScrollOffset - 1)
                                         Else
                                                 CursorY = Max(CursorY - 1, 1)
                                                 If CursorY < File(CurrentFile).ScrollOffset Then File(CurrentFile).ScrollOffset = CursorY
                                         End If
                                 Case 20480 'Down
                                         If KeyCtrl Then
-                                                File(CurrentFile).ScrollOffset = Max(1, File(CurrentFile).ScrollOffset + 1)
+                                                File(CurrentFile).ScrollOffset = Min(File(CurrentFile).ScrollOffset + 1, File(CurrentFile).TotalLines)
                                         Else
                                                 CursorY = Min(CursorY + 1, File(CurrentFile).TotalLines)
                                                 If CursorY > File(CurrentFile).ScrollOffset + VerticalLinesVisible Then File(CurrentFile).ScrollOffset = Max(1, CursorY - VerticalLinesVisible)
