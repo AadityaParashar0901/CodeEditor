@@ -79,7 +79,7 @@ Dim Shared As Long VerticalLinesVisible, HorizontalCharsVisible
 '---------------------------
 '-------- Side Pane --------
 Dim Shared As Integer UI_Side_Pane
-UI_Side_Pane = UI_New("UI_Side_Pane", UI_TYPE_Frame, 0, 17, 128, -16, "", "")
+UI_Side_Pane = UI_New("UI_Side_Pane", UI_TYPE_Frame, 0, 17, 16, -16, "", "")
 UI_Set_BG _RGB32(47)
 '---------------------------
 '-------- Open File Dialog --------
@@ -162,8 +162,8 @@ Do
                 MoveScrollToCursor 0
                 DrawText
                 If Summary_Bar Then DrawSummaryBar
+                If UI(UI_Side_Pane).W >= 128 Then DrawSidePane
         End If
-        If UI(UI_Side_Pane).Visible Then DrawSidePane
         If UI(UI_Dialog_OpenFile).Visible Then
                 OpenFileDialog
         ElseIf UI(UI_Dialog_SaveFileAs).Visible Then
@@ -313,7 +313,7 @@ Do
         'Go to Line
         If UI(UI_MenuButton_View).Response = 2 Or (KeyCtrl And (KeyHit = 71 Or KeyHit = 103)) Then UI(UI_Dialog_GoToLine).Visible = -1: UI_Focus = UI_Dialog_GoToLine
         'Toggle Side Pane
-        If UI(UI_MenuButton_View).Response = 3 Or (KeyAlt And (KeyHit = 84 Or KeyHit = 116)) Then UI(UI_Side_Pane).W = 144 - UI(UI_Side_Pane).W
+        If UI(UI_MenuButton_View).Response = 3 Or (KeyAlt And (KeyHit = 84 Or KeyHit = 116)) Then UI(UI_Side_Pane).W = 272 - UI(UI_Side_Pane).W
         'Toggle Summary Bar
         If UI(UI_MenuButton_View).Response = 4 Or (KeyAlt And (KeyHit = 66 Or KeyHit = 98)) Then Summary_Bar = 1 - Summary_Bar
         'Go to Next Cursor
@@ -537,8 +537,8 @@ Sub DrawStatusBar
         Line (0, _Height - 16)-(_Width - 1, _Height - 1), _RGB32(0, 63, 127), BF
 End Sub
 Sub DrawSidePane
-        Static FilesList$, ScrollOffset, LastCurrentFile, RefreshTimer
-        If FilesList$ = "" Or LastCurrentFile <> CurrentFile Or Timer(0.1) - RefreshTimer > 2 Then FilesList$ = GetDirList$(PathBack$(File(CurrentFile).Path)): RefreshTimer = Timer(0.1)
+        Static FilesList$, ScrollOffset, LastCurrentFile
+        If FilesList$ = "" Or LastCurrentFile <> CurrentFile Then FilesList$ = GetDirList$(PathBack$(File(CurrentFile).Path))
         If _MouseX < UI(UI_Side_Pane).W Then ScrollOffset = ScrollOffset + UI_MouseWheel
         J = 1: For I = ScrollOffset To Min(ScrollOffset + VerticalLinesVisible, ListStringLength(FilesList$)): _PrintString (0, 16 + _SHL(J, 4)), ListStringGet(FilesList$, I): J = J + 1: Next I
         LastCurrentFile = CurrentFile
