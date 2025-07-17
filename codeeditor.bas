@@ -262,7 +262,7 @@ Do
                                         Else
                                                 CursorX = Len(Rope(RopeI)) + 1
                                         End If
-                                        File(CurrentFile).HorizontalScrollOffset = Len(Rope(RopeI)) + 1 - _SHR(HorizontalCharsVisible, 1)
+                                        File(CurrentFile).HorizontalScrollOffset = Max(1, Len(Rope(RopeI)) + 1 - _SHR(HorizontalCharsVisible, 1))
                                 Case 21248 'Delete
                                         If KeyCtrl Then
                                                 DeleteLine CursorY
