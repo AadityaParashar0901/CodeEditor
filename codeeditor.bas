@@ -78,6 +78,7 @@ UI_Label_CursorPosition = UI_New("UI_Label_CursorPosition", UI_TYPE_Label, 96, -
 Dim Shared As Long VerticalLinesVisible, HorizontalCharsVisible
 '---------------------------
 '-------- Side Pane --------
+Dim Shared As Integer UI_Side_Pane
 UI_Side_Pane = UI_New("UI_Side_Pane", UI_TYPE_Frame, 0, 17, 128, -16, "", "")
 UI_Set_BG _RGB32(47)
 '---------------------------
@@ -110,7 +111,7 @@ If _CommandCount Then
                 OpenFile INFILE$
         Next I
 Else
-        OpenWorkspace Config_CurrentWorkspace
+        If _FileExists(Config_CurrentWorkspace) Then OpenWorkspace Config_CurrentWorkspace
 End If
 
 Dim Shared As Long TextOffsetX, TextOffsetY: TextOffsetY = 16
@@ -143,7 +144,7 @@ Do
         UI_MouseWheel = 0
         While _MouseInput
                 UI_MouseWheel = UI_MouseWheel + _MouseWheel
-                If UI_Focus = 0 Then File(CurrentFile).ScrollOffset = Clamp(1, File(CurrentFile).ScrollOffset + 3 * _MouseWheel, File(CurrentFile).TotalLines)
+                If UI_Focus = 0 And _MouseX > UI(UI_Side_Pane).W Then File(CurrentFile).ScrollOffset = Clamp(1, File(CurrentFile).ScrollOffset + 3 * _MouseWheel, File(CurrentFile).TotalLines)
         Wend
         If UI_MouseWheel Then MoveScrollToCursor -1
 
@@ -162,6 +163,7 @@ Do
                 DrawText
                 If Summary_Bar Then DrawSummaryBar
         End If
+        If UI(UI_Side_Pane).Visible Then DrawSidePane
         If UI(UI_Dialog_OpenFile).Visible Then
                 OpenFileDialog
         ElseIf UI(UI_Dialog_SaveFileAs).Visible Then
@@ -534,6 +536,13 @@ End Sub
 Sub DrawStatusBar
         Line (0, _Height - 16)-(_Width - 1, _Height - 1), _RGB32(0, 63, 127), BF
 End Sub
+Sub DrawSidePane
+        Static FilesList$, ScrollOffset, LastCurrentFile, RefreshTimer
+        If FilesList$ = "" Or LastCurrentFile <> CurrentFile Or Timer(0.1) - RefreshTimer > 2 Then FilesList$ = GetDirList$(PathBack$(File(CurrentFile).Path)): RefreshTimer = Timer(0.1)
+        If _MouseX < UI(UI_Side_Pane).W Then ScrollOffset = ScrollOffset + UI_MouseWheel
+        J = 1: For I = ScrollOffset To Min(ScrollOffset + VerticalLinesVisible, ListStringLength(FilesList$)): _PrintString (0, 16 + _SHL(J, 4)), ListStringGet(FilesList$, I): J = J + 1: Next I
+        LastCurrentFile = CurrentFile
+End Sub
 Sub DrawText
         VerticalLinesVisible = _SHR(_Height - 32, 4) - 1
         HorizontalCharsVisible = _SHR(_Width - TextOffsetX, 3) - Summary_Bar * 8
@@ -753,7 +762,7 @@ Function ceil& (t#)
 End Function
 
 Function PathBack$ (Path$)
-        If Right$(Path$, 1) = FILE_SEPERATOR Then P$ = Left$(Path$, Len(Path$) - 1)
+        If Right$(Path$, 1) = FILE_SEPERATOR Then P$ = Left$(Path$, Len(Path$) - 1) Else P$ = Path$
         PathBack$ = Left$(Path$, _InStrRev(P$, FILE_SEPERATOR))
 End Function
 Function GetDirList$ (CurrentDirectory$)
