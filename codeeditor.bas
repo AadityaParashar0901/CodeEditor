@@ -280,7 +280,7 @@ Do
                         'Display Cursor
                         If ShowCursor = 0 And Timer(0.1) > ShowCursorTime Then _Continue
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
-                        X = TextOffsetX + _SHL(Min(CursorX, Len(Rope(RopeI)) + 2 - File(CurrentFile).HorizontalScrollOffset) - 1, 3)
+                        X = TextOffsetX + _SHL(Min(CursorX, Len(Rope(RopeI)) + 1) - File(CurrentFile).HorizontalScrollOffset, 3)
                         Y = TextOffsetY + _SHL(CursorY - File(CurrentFile).ScrollOffset, 4)
                         Line (X, Y)-(X + 7, Y + 15), -1, B
                 Next I
@@ -715,6 +715,7 @@ Sub OpenWorkspace (Path$)
         WorkspaceMap$ = String$(LOF(__F), 0)
         Get #__F, , WorkspaceMap$
         Close #__F
+        If Len(WorkspaceMap$) < 5 Then Exit Sub
         For I = 1 To CVI(MapGetKey(WorkspaceMap$, "TotalFiles"))
                 FileMap$ = MapGetKey(WorkspaceMap$, MKL$(I))
                 OpenFile MapGetKey(FileMap$, "Path")
