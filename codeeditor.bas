@@ -586,7 +586,6 @@ End Sub
 Sub ParseConfig
         Config_BackgroundColor = CVL(MapGetKey(Config$, "BackgroundColor"))
         Config_TextColor = CVL(MapGetKey(Config$, "TextColor"))
-        If Len(Config_CurrentWorkspace) Then OpenWorkspace Config_CurrentWorkspace
         Config_FileSeperator = MapGetKey(Config$, "FileSeperator")
         Config_OpenFileSpeed = CVL(MapGetKey(Config$, "OpenFileSpeed"))
 End Sub
