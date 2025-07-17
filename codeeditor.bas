@@ -48,7 +48,7 @@ ReadConfigFile
 UI_MenuButton_File = UI_New("UI_MenuButton_File", UI_TYPE_MenuButton, 0, 0, 48, 16, " File ", ListStringFromString("\New File|Ctrl+N,\Open File|Ctrl+O,\Save File|Ctrl+S,Save \As File|Ctrl+Shift+S,\Close File|Ctrl+W,E\xit|Ctrl+Q"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 70, 100307, 102
-UI_MenuButton_Workspace = UI_New("UI_MenuButton_Workspace", UI_TYPE_MenuButton, 48, 0, 88, 16, " Workspace ", ListStringFromString("\Open Workspace,\Save Workspace,\Close Workspace"))
+UI_MenuButton_Workspace = UI_New("UI_MenuButton_Workspace", UI_TYPE_MenuButton, 48, 0, 88, 16, " Workspace ", ListStringFromString("\Open Workspace,\Save Workspace"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 87, 100307, 119
 UI_MenuButton_View = UI_New("UI_MenuButton_View", UI_TYPE_MenuButton, 136, 0, 48, 16, " View ", ListStringFromString("Go to \File,Go to \Line|Ctrl+G,\Toggle Side Pane|Alt+T,Toggle Summary Bar|Alt+B"))
@@ -302,6 +302,10 @@ Do
         If UI(UI_MenuButton_File).Response = 5 Or (KeyCtrl And (KeyHit = 87 Or KeyHit = 119)) Then CloseFile CurrentFile
         'Exit
         If UI(UI_MenuButton_File).Response = 6 Or (KeyCtrl And (KeyHit = 81 Or KeyHit = 113)) Then Exit Do
+        'Open Workspace
+        If UI(UI_MenuButton_Workspace).Response = 1 Then OpenWorkspace "codeeditor_workspace"
+        'Save Workspace
+        If UI(UI_MenuButton_Workspace).Response = 2 Then SaveWorkspace "codeeditor_workspace"
         'Go to File
         If UI(UI_MenuButton_View).Response = 1 Then UI(FileChangeDialog).Visible = -1: UI_Focus = FileChangeDialog
         'Go to Line
@@ -535,6 +539,7 @@ Sub DrawText
         HorizontalCharsVisible = _SHR(_Width - TextOffsetX, 3) - Summary_Bar * 8
         J = TextOffsetY
         For I = File(CurrentFile).ScrollOffset To Min(File(CurrentFile).ScrollOffset + VerticalLinesVisible, File(CurrentFile).TotalLines)
+                If InRange(1, I, File(CurrentFile).TotalLines) = 0 Then _Continue
                 K = CVL(Mid$(File(CurrentFile).Content, I * 4 - 3, 4))
                 L$ = _Trim$(Str$(I))
                 T$ = Mid$(Rope(K), File(CurrentFile).HorizontalScrollOffset)
@@ -558,7 +563,7 @@ Sub NewConfig
         Config$ = MapNew
         Config_BackgroundColor = _RGB32(32)
         Config_TextColor = _RGB32(255)
-        Config_CurrentWorkspace = ""
+        Config_CurrentWorkspace = "codeeditor_workspace"
         Config_FileSeperator = Chr$(13) + Chr$(10)
         Config_OpenFileSpeed = 256
 End Sub
@@ -697,10 +702,33 @@ End Function
 
 '-------- Workspace Management --------
 Sub OpenWorkspace (Path$)
+        __F = FreeFile
+        Open Path$ For Binary As #__F
+        WorkspaceMap$ = String$(LOF(__F), 0)
+        Get #__F, , WorkspaceMap$
+        Close #__F
+        For I = 1 To CVI(MapGetKey(WorkspaceMap$, "TotalFiles"))
+                FileMap$ = MapGetKey(WorkspaceMap$, MKL$(I))
+                OpenFile MapGetKey(FileMap$, "Path")
+                FileID = UBound(File)
+                File(FileID).Cursors = MapGetKey(FileMap$, "Cursors")
+                File(FileID).ScrollOffset = CVL(MapGetKey(FileMap$, "ScrollOffset"))
+        Next I
 End Sub
-Sub SaveWorkspace
-End Sub
-Sub CloseWorkspace
+Sub SaveWorkspace (Path$)
+        WorkspaceMap$ = MapNew
+        MapSetKey WorkspaceMap$, "TotalFiles", MKI$(UBound(File))
+        For I = 1 To UBound(File)
+                FileMap$ = MapNew
+                MapSetKey FileMap$, "Path", File(I).Path
+                MapSetKey FileMap$, "Cursors", File(I).Cursors
+                MapSetKey FileMap$, "ScrollOffset", MKL$(File(I).ScrollOffset)
+                MapSetKey WorkspaceMap$, MKL$(I), FileMap$
+        Next I
+        __F = FreeFile
+        Open Path$ For Output As #__F
+        Print #__F, WorkspaceMap$;
+        Close #__F
 End Sub
 '--------------------------------------
 
