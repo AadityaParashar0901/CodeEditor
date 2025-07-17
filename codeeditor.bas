@@ -202,6 +202,7 @@ Do
                                                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
                                                         Rope(RopeI) = S$ + T$
                                                 End If
+                                                File(CurrentFile).HorizontalScrollOffset = 1
                                         Case 32 To 126: If KeyCtrl = 0 And KeyAlt = 0 Then InsertText K$, CursorX, CursorY: BoundCursor = True
                                 End Select
                         End If
@@ -258,7 +259,7 @@ Do
                                         If KeyCtrl Then
                                                 CursorX = 1
                                                 CursorY = File(CurrentFile).TotalLines
-                                                MoveScrollToCursor File(CurrentFile).TotalLines
+                                                MoveScrollToCursor Max(1, File(CurrentFile).TotalLines - VerticalLinesVisible)
                                         Else
                                                 CursorX = Len(Rope(RopeI)) + 1
                                         End If
@@ -690,12 +691,12 @@ Sub SaveFileTasks: Static As Long SavingFileDialog, SavingFile_FileNameLabel, Sa
         Close #File(FileID).FileID
 End Sub
 Sub CloseFile (F As Long)
-        EmptyRopePoints = EmptyRopePoints + File(F).Content
+        EmptyRopePoints = EmptyRopePoints + Left$(File(F).Content, _SHL(File(F).TotalLines, 2))
         For I = F + 1 To UBound(File): Swap File(I), File(I - 1): Next I
         If I > 2 Then ReDim _Preserve File(1 To I - 2) As File Else ReDim File(0) As File
 End Sub
 Function GetNewRopePointer&
-        If Len(EmptyRopePoints) = 0 Then
+        If Len(EmptyRopePoints) < 4 Then
                 I = UBound(Rope) + 1
                 ReDim _Preserve Rope(1 To I) As String
                 GetNewRopePointer& = I
