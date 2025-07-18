@@ -48,7 +48,7 @@ ReadConfigFile
 UI_MenuButton_File = UI_New("UI_MenuButton_File", UI_TYPE_MenuButton, 0, 0, 48, 16, " File ", ListStringFromString("\New File|Ctrl+N,\Open File|Ctrl+O,\Save File|Ctrl+S,Save \As File|Ctrl+Shift+S,\Close File|Ctrl+W,E\xit|Ctrl+Q"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 70, 100307, 102
-UI_MenuButton_Workspace = UI_New("UI_MenuButton_Workspace", UI_TYPE_MenuButton, 48, 0, 88, 16, " Workspace ", ListStringFromString("\Open Workspace,\Save Workspace"))
+UI_MenuButton_Workspace = UI_New("UI_MenuButton_Workspace", UI_TYPE_MenuButton, 48, 0, 88, 16, " Workspace ", ListStringFromString("\Open Workspace,\Save Workspace|Ctrl+Alt+S"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 87, 100307, 119
 UI_MenuButton_View = UI_New("UI_MenuButton_View", UI_TYPE_MenuButton, 136, 0, 48, 16, " View ", ListStringFromString("Go to \File,Go to \Line|Ctrl+G,\Toggle Side Pane|Alt+T,Toggle Summary Bar|Alt+B"))
@@ -208,11 +208,6 @@ Do
                         End If
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
                         ShowCursor = Timer(0.1) - Int(Timer(0.1)) < 0.5
-                        If BoundCursor Then
-                                CursorX = Clamp(1, CursorX, Len(Rope(RopeI)) + 1)
-                                CursorY = Clamp(1, CursorY, File(CurrentFile).TotalLines)
-                                ShowCursorTime = Timer(0.1) + 1
-                        End If
                         Select EveryCase KeyHit
                                 Case 19200 'Left
                                         If KeyCtrl Then
@@ -268,13 +263,23 @@ Do
                                         If KeyCtrl Then
                                                 DeleteLine CursorY
                                                 File(CurrentFile).HorizontalScrollOffset = 1
+                                                BoundCursor = True
                                         Else
-                                                DeleteText 1, CursorX + 1, CursorY
+                                                If CursorX = 1 Then
+
+                                                Else
+                                                        DeleteText 1, CursorX + 1, CursorY
+                                                End If
                                         End If
                                 Case 86, 118: If KeyCtrl Then
                                                 InsertText _Clipboard$, CursorX, CursorY
                                         End If
                         End Select
+                        If BoundCursor Then
+                                CursorX = Clamp(1, CursorX, Len(Rope(RopeI)) + 1)
+                                CursorY = Clamp(1, CursorY, File(CurrentFile).TotalLines)
+                                ShowCursorTime = Timer(0.1) + 1
+                        End If
                         Mid$(File(CurrentFile).Cursors, I, 4) = MKL$(CursorX)
                         Mid$(File(CurrentFile).Cursors, I + 4, 4) = MKL$(CursorY)
                         If I = 1 Then UI(UI_Label_CursorPosition).Label = "Cursor:" + Str$(CursorX) + Str$(CursorY)
@@ -298,7 +303,7 @@ Do
         'Open File
         If UI(UI_MenuButton_File).Response = 2 Or (KeyCtrl And (KeyHit = 79 Or KeyHit = 111)) Then UI(UI_Dialog_OpenFile).Visible = -1: UI_Focus = UI_Dialog_OpenFile
         'Save File
-        If UI(UI_MenuButton_File).Response = 3 Or (KeyCtrl And KeyShift = 0 And (KeyHit = 83 Or KeyHit = 115)) Then SaveFile CurrentFile
+        If UI(UI_MenuButton_File).Response = 3 Or (KeyCtrl And KeyShift = 0 And KeyAlt = 0 And (KeyHit = 83 Or KeyHit = 115)) Then SaveFile CurrentFile
         'Save As File
         If UI(UI_MenuButton_File).Response = 4 Or (KeyCtrl And KeyShift And (KeyHit = 83 Or KeyHit = 115)) Then UI(UI_Dialog_SaveFileAs).Visible = -1: UI_Focus = UI_Dialog_SaveFileAs
         'Close File
@@ -308,7 +313,7 @@ Do
         'Open Workspace
         If UI(UI_MenuButton_Workspace).Response = 1 Then OpenWorkspace "codeeditor_workspace"
         'Save Workspace
-        If UI(UI_MenuButton_Workspace).Response = 2 Then SaveWorkspace "codeeditor_workspace"
+        If UI(UI_MenuButton_Workspace).Response = 2 Or (KeyCtrl And KeyAlt And KeyShift = 0 And (KeyHit = 83 Or KeyHit = 115)) Then SaveWorkspace "codeeditor_workspace"
         'Go to File
         If UI(UI_MenuButton_View).Response = 1 Then UI(FileChangeDialog).Visible = -1: UI_Focus = FileChangeDialog
         'Go to Line
