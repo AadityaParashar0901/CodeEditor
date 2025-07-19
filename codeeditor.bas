@@ -34,7 +34,8 @@ End Type
 Const UI_TYPE_Label = 1, UI_TYPE_Button = 2, UI_TYPE_Dialog = 3, UI_TYPE_ProgressBar = 4, UI_TYPE_MenuButton = 5, UI_TYPE_Image = 6, UI_TYPE_ScrollBar = 7, UI_TYPE_ToggleButton = 8, UI_TYPE_ListView = 9, UI_TYPE_TextView = 10, UI_TYPE_Frame = 11
 Const UI_PROP_Center = 17
 Const UI_KEY_Visible = 33, UI_KEY_Focus = 34, UI_KEY_Visible_And_Focus = 35
-Dim Shared UI(0) As UI, UI_PARENT As _Unsigned Integer, UI_Focus_Parent As _Unsigned Integer, UI_Focus As _Unsigned Integer, UI_MouseWheel As Integer, KeyHit As Long
+Dim Shared UI(0) As UI, UI_PARENT As _Unsigned Integer, UI_Focus_Parent As _Unsigned Integer, UI_Focus As _Unsigned Integer, UI_MouseWheel As Integer
+Dim Shared As _Byte KeyCtrl, KeyAlt, KeyShift: Dim Shared KeyHit As Long
 '--------------------
 
 Dim Shared As String SaveFileQueue
@@ -265,8 +266,9 @@ Do
                                                 File(CurrentFile).HorizontalScrollOffset = 1
                                                 BoundCursor = True
                                         Else
-                                                If CursorX = 1 Then
-
+                                                If CursorX = Len(Rope(RopeI)) + 1 And CursorY < File(CurrentFile).TotalLines Then
+                                                        Rope(RopeI) = Rope(RopeI) + Rope(CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY + 1, 2) - 3, 4)))
+                                                        DeleteLine CursorY + 1
                                                 Else
                                                         DeleteText 1, CursorX + 1, CursorY
                                                 End If
@@ -313,7 +315,7 @@ Do
         'Open Workspace
         If UI(UI_MenuButton_Workspace).Response = 1 Then OpenWorkspace "codeeditor_workspace"
         'Save Workspace
-        If UI(UI_MenuButton_Workspace).Response = 2 Or (KeyCtrl And KeyAlt And KeyShift = 0 And (KeyHit = 83 Or KeyHit = 115)) Then SaveWorkspace "codeeditor_workspace"
+        If UI(UI_MenuButton_Workspace).Response = 2 Or (KeyCtrl And KeyAlt And (KeyHit = 83 Or KeyHit = 115)) Then SaveWorkspace "codeeditor_workspace"
         'Go to File
         If UI(UI_MenuButton_View).Response = 1 Then UI(FileChangeDialog).Visible = -1: UI_Focus = FileChangeDialog
         'Go to Line
@@ -541,6 +543,10 @@ Sub DrawSummaryBar
 End Sub
 Sub DrawStatusBar
         Line (0, _Height - 16)-(_Width - 1, _Height - 1), _RGB32(0, 63, 127), BF
+        If KeyCtrl Then T$ = " Ctrl "
+        If KeyAlt Then T$ = T$ + " Alt "
+        If KeyShift Then T$ = T$ + " Shift "
+        _PrintString (_Width - _SHL(Len(T$), 3), _Height - 16), T$
 End Sub
 Sub DrawSidePane
         Static FilesList$, ScrollOffset, LastCurrentFile
