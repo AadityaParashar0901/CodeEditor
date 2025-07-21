@@ -212,13 +212,13 @@ Do
                         Select EveryCase KeyHit
                                 Case 19200 'Left
                                         If KeyCtrl Then
-                                                File(CurrentFile).HorizontalScrollOffset = Max(1, File(CurrentFile).HorizontalScrollOffset - 1)
+                                                File(CurrentFile).HorizontalScrollOffset = Max(1, File(CurrentFile).HorizontalScrollOffset - 3)
                                         Else
                                                 CursorX = Max(CursorX - 1, 1)
                                         End If
                                 Case 19712 'Right
                                         If KeyCtrl Then
-                                                File(CurrentFile).HorizontalScrollOffset = Min(File(CurrentFile).HorizontalScrollOffset + 1, Len(Rope(RopeI)) + 1)
+                                                File(CurrentFile).HorizontalScrollOffset = Min(File(CurrentFile).HorizontalScrollOffset + 3, Len(Rope(RopeI)) + 1)
                                         Else
                                                 CursorX = Min(CursorX + 1, Len(Rope(RopeI)) + 1)
                                         End If
@@ -371,10 +371,13 @@ End Sub
 
 '-------- Rope Management --------
 Sub InsertText (T$, CursorX As Long, CursorY As Long)
-        RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
-        Rope(RopeI) = Left$(Rope(RopeI), CursorX - 1) + T$ + Mid$(Rope(RopeI), CursorX)
-        CursorX = CursorX + Len(T$)
-        UpdateRope RopeI
+        If InStr(T$, Chr$(10)) Or InStr(T$, Chr$(13)) Then
+        Else
+                RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
+                Rope(RopeI) = Left$(Rope(RopeI), CursorX - 1) + T$ + Mid$(Rope(RopeI), CursorX)
+                CursorX = CursorX + Len(T$)
+                UpdateRope RopeI
+        End If
         File(CurrentFile).Saved = 0
 End Sub
 Sub InsertLine (CursorY As Long)
