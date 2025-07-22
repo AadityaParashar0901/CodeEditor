@@ -174,7 +174,7 @@ Do
         ElseIf UI_Focus = 0 And CurrentFile Then 'Handle Text Area
                 If UI(UI_ScrollBar_Text).Response Then File(CurrentFile).ScrollOffset = UI(UI_ScrollBar_Text).Scroll
                 If _MouseButton(1) And MouseInBox(0, 16, _Width - 9, _Height - 17) Then
-                        If KeyAlt Then AddCursor _SHR(_MouseX - TextOffsetX, 3) + 1, _SHR(_MouseY - TextOffsetY, 4) + File(CurrentFile).ScrollOffset Else SetCursor _SHR(_MouseX - TextOffsetX, 3) + 1, _SHR(_MouseY - TextOffsetY, 4) + File(CurrentFile).ScrollOffset
+                        If KeyAlt Then AddCursor _SHR(_MouseX - TextOffsetX, 3) + File(CurrentFile).HorizontalScrollOffset, _SHR(_MouseY - TextOffsetY, 4) + File(CurrentFile).ScrollOffset Else SetCursor _SHR(_MouseX - TextOffsetX, 3) + File(CurrentFile).HorizontalScrollOffset, _SHR(_MouseY - TextOffsetY, 4) + File(CurrentFile).ScrollOffset
                 End If
                 UI(UI_ScrollBar_Text).MaxScroll = File(CurrentFile).TotalLines
                 UI(UI_ScrollBar_Text).Scroll = File(CurrentFile).ScrollOffset
