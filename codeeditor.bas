@@ -21,6 +21,8 @@ Dim Shared File(0) As File, CurrentFile As Long
 Dim Shared Rope(0) As String, EmptyRopePoints As String
 EmptyRopePoints = ""
 
+Dim Shared As String Console
+
 '-------- UI --------
 Type UI
         As String Name, Label, Content, ParsedLabel, ParsedLabelUnderlined, ParsedContent, ParsedContentUnderlined
@@ -176,6 +178,17 @@ Do
                 If _MouseButton(1) And MouseInBox(0, 16, _Width - 9, _Height - 17) Then
                         If KeyAlt Then AddCursor _SHR(_MouseX - TextOffsetX, 3) + File(CurrentFile).HorizontalScrollOffset, _SHR(_MouseY - TextOffsetY, 4) + File(CurrentFile).ScrollOffset Else SetCursor _SHR(_MouseX - TextOffsetX, 3) + File(CurrentFile).HorizontalScrollOffset, _SHR(_MouseY - TextOffsetY, 4) + File(CurrentFile).ScrollOffset
                 End If
+                If KeyAlt And Len(File(CurrentFile).Cursors) = 8 Then
+                        If KeyShift And Left$(Console, 1) <> "-" Then Console = "-" + Console
+                        If InRange(48, KeyHit, 57) Then Console = Console + Chr$(KeyHit)
+                Else
+                        If LastKeyAlt And Len(File(CurrentFile).Cursors) = 8 Then
+                                SetCursor GetCursorX, GetCursorY + Val(Console)
+                        Else
+                                Console = ""
+                        End If
+                End If
+                LastKeyAlt = KeyAlt
                 UI(UI_ScrollBar_Text).MaxScroll = File(CurrentFile).TotalLines
                 UI(UI_ScrollBar_Text).Scroll = File(CurrentFile).ScrollOffset
                 For I = 1 To Len(File(CurrentFile).Cursors) Step 8
@@ -358,6 +371,12 @@ End Sub
 Sub SetCursor (X As Long, Y As Long)
         File(CurrentFile).Cursors = MKL$(Max(1, X)) + MKL$(Clamp(1, Y, File(CurrentFile).TotalLines))
 End Sub
+Function GetCursorX&
+        GetCursorX = CVL(Left$(File(CurrentFile).Cursors, 4))
+End Function
+Function GetCursorY&
+        GetCursorY = CVL(Mid$(File(CurrentFile).Cursors, 5, 4))
+End Function
 Sub MoveScrollToCursor (Y As Long)
         Static DestY As Long
         If Y Then DestY = Y
@@ -549,6 +568,7 @@ Sub DrawStatusBar
         If KeyCtrl Then T$ = " Ctrl "
         If KeyAlt Then T$ = T$ + " Alt "
         If KeyShift Then T$ = T$ + " Shift "
+        T$ = T$ + Console
         _PrintString (_Width - _SHL(Len(T$), 3), _Height - 16), T$
 End Sub
 Sub DrawSidePane
@@ -565,7 +585,8 @@ Sub DrawText
         For I = File(CurrentFile).ScrollOffset To Min(File(CurrentFile).ScrollOffset + VerticalLinesVisible, File(CurrentFile).TotalLines)
                 If InRange(1, I, File(CurrentFile).TotalLines) = 0 Then _Continue
                 K = CVL(Mid$(File(CurrentFile).Content, I * 4 - 3, 4))
-                L$ = _Trim$(Str$(I))
+                If KeyAlt And GetCursorY <> I And Len(File(CurrentFile).Cursors) = 8 Then L~& = Abs(I - GetCursorY) Else L~& = I
+                L$ = _Trim$(Str$(L~&))
                 T$ = Mid$(Rope(K), File(CurrentFile).HorizontalScrollOffset)
                 L$ = Space$(_SHR(TextOffsetX, 3) - Len(L$) - 1) + L$ + Chr$(179) + Left$(T$, HorizontalCharsVisible)
                 _PrintString (0, J), L$
