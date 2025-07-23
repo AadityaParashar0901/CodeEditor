@@ -809,7 +809,7 @@ End Sub
 '----------------------------------------------------------------Libraries----------------------------------------------------------------
 Function SearchPreviousWord (Sentence As String, CurrentPosition As Long)
         Dim As Long I
-        For I = CurrentPosition - 1 To 1 Step -1
+        For I = Min(Len(Sentence) - 1, CurrentPosition - 1) To 1 Step -1
                 If Asc(Sentence, I) <> 32 And Asc(Sentence, I + 1) = 32 Then SearchPreviousWord = I: Exit Function
         Next I
         SearchPreviousWord = 1
