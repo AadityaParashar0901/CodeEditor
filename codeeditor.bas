@@ -12,7 +12,7 @@ $Else
 $End If
 
 Type File
-        As String Name, Path, Content, Cursors
+        As String Name, Path, Content, Cursors, CursorStack
         As _Unsigned Long TotalLines, CurrentCursor
         As Long ScrollOffset, FileID, SaveOffset, HorizontalScrollOffset
         As _Unsigned _Byte Opened, Saved
@@ -57,7 +57,8 @@ UI_Set_KeyMaps 100308, 87, 100307, 119
 UI_MenuButton_View = UI_New("UI_MenuButton_View", UI_TYPE_MenuButton, 136, 0, 48, 16, " View ", ListStringFromString("Go to \File,Go to \Line|Ctrl+G,\Toggle Side Pane|Alt+T,Toggle Summary Bar|Alt+B"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 86, 100307, 118
-UI_MenuButton_Cursors = UI_New("UI_MenuButton_Cursors", UI_TYPE_MenuButton, 184, 0, 72, 16, " Cursors ", ListStringFromString("Go to \Next Cursor|Alt+X,Set Cursor to Center|F8"))
+TMP_LIST_STRING$ = ListStringFromString("Go to \Next Cursor|Alt+X,Set Cursor to Center|F8"): ListStringAdd TMP_LIST_STRING$, "Push Cursors|Ctrl+[": ListStringAdd TMP_LIST_STRING$, "Pop Cursors|Ctrl+]"
+UI_MenuButton_Cursors = UI_New("UI_MenuButton_Cursors", UI_TYPE_MenuButton, 184, 0, 72, 16, " Cursors ", TMP_LIST_STRING$): TMP_LIST_STRING$ = ""
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 67, 100307, 99
 Dim Shared As Integer FileChangeDialog
@@ -197,7 +198,7 @@ Do
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
                         If RopeI = 0 Then _Continue
                         BoundCursor = False
-                        If Len(K$) Then
+                        If Len(K$) And KeyCtrl = 0 And KeyAlt = 0 Then
                                 Select Case Asc(K$)
                                         Case 8: DeleteText 1, CursorX, CursorY: BoundCursor = True
                                         Case 9: InsertText Space$(8), CursorX, CursorY: BoundCursor = True
@@ -217,21 +218,25 @@ Do
                                                         Rope(RopeI) = S$ + T$
                                                 End If
                                                 File(CurrentFile).HorizontalScrollOffset = 1
-                                        Case 32 To 126: If KeyCtrl = 0 And KeyAlt = 0 Then InsertText K$, CursorX, CursorY: BoundCursor = True
+                                        Case 32 To 126: InsertText K$, CursorX, CursorY: BoundCursor = True
                                 End Select
                         End If
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
                         ShowCursor = Timer(0.1) - Int(Timer(0.1)) < 0.5
                         Select EveryCase KeyHit
                                 Case 19200 'Left
-                                        If KeyCtrl Then
+                                        If KeyAlt Then
                                                 File(CurrentFile).HorizontalScrollOffset = Max(1, File(CurrentFile).HorizontalScrollOffset - 3)
+                                        ElseIf KeyCtrl Then
+                                                CursorX = SearchPreviousWord(Rope(RopeI), CursorX)
                                         Else
                                                 CursorX = Max(CursorX - 1, 1)
                                         End If
                                 Case 19712 'Right
-                                        If KeyCtrl Then
+                                        If KeyAlt Then
                                                 File(CurrentFile).HorizontalScrollOffset = Min(File(CurrentFile).HorizontalScrollOffset + 3, Len(Rope(RopeI)) + 1)
+                                        ElseIf KeyCtrl Then
+                                                CursorX = SearchNextWord(Rope(RopeI), CursorX)
                                         Else
                                                 CursorX = Min(CursorX + 1, Len(Rope(RopeI)) + 1)
                                         End If
@@ -255,7 +260,7 @@ Do
                                 Case 20736 'PgDn
                                         CursorY = Min(CursorY + VerticalLinesVisible, File(CurrentFile).TotalLines)
                                         If CursorY > File(CurrentFile).ScrollOffset + VerticalLinesVisible Then File(CurrentFile).ScrollOffset = Max(1, CursorY - VerticalLinesVisible)
-                                Case 19200, 19712, 18432, 20480, 18688, 19712: MoveScrollToCursor -1
+                                Case 19200, 19712, 18432, 20480, 18688, 19712: MoveScrollToCursor -1: BoundCursor = True
                                 Case 18176 'Home
                                         If KeyCtrl Then
                                                 CursorX = 1: CursorY = 1
@@ -263,16 +268,16 @@ Do
                                         Else
                                                 CursorX = 1
                                         End If
-                                        File(CurrentFile).HorizontalScrollOffset = 1
+                                        If InRange(File(CurrentFile).ScrollOffset, CursorY, File(CurrentFile).ScrollOffset + VerticalLinesVisible) Then File(CurrentFile).HorizontalScrollOffset = 1
                                 Case 20224 'End
                                         If KeyCtrl Then
                                                 CursorX = 1
                                                 CursorY = File(CurrentFile).TotalLines
                                                 MoveScrollToCursor Max(1, File(CurrentFile).TotalLines - VerticalLinesVisible)
-                                                File(CurrentFile).HorizontalScrollOffset = 1
+                                                If InRange(File(CurrentFile).ScrollOffset, CursorY, File(CurrentFile).ScrollOffset + VerticalLinesVisible) Then File(CurrentFile).HorizontalScrollOffset = 1
                                         Else
                                                 CursorX = Len(Rope(RopeI)) + 1
-                                                File(CurrentFile).HorizontalScrollOffset = Max(1, Len(Rope(RopeI)) + 1 - _SHR(HorizontalCharsVisible, 1))
+                                                If InRange(File(CurrentFile).ScrollOffset, CursorY, File(CurrentFile).ScrollOffset + VerticalLinesVisible) Then File(CurrentFile).HorizontalScrollOffset = Max(1, Len(Rope(RopeI)) + 1 - _SHR(HorizontalCharsVisible, 1))
                                         End If
                                 Case 21248 'Delete
                                         If KeyCtrl Then
@@ -346,8 +351,16 @@ Do
                 UI_Focus = 0
         End If
         'Set Cursor to Center
-        If UI(UI_MenuButton_Cursors).Response = 2 Or (KeyHit = 16896) Then
+        If CurrentFile And (UI(UI_MenuButton_Cursors).Response = 2 Or (KeyHit = 16896)) Then
                 SetCursor 1, File(CurrentFile).ScrollOffset + _SHR(VerticalLinesVisible, 1)
+        End If
+        'Push Cursor
+        If CurrentFile And (UI(UI_MenuButton_Cursors).Response = 3 Or (KeyCtrl And (KeyHit = 27))) Then
+                PushCursors
+        End If
+        'Pop Cursor
+        If CurrentFile And (UI(UI_MenuButton_Cursors).Response = 4 Or (KeyCtrl And (KeyHit = 29))) Then
+                PopCursors
         End If
         'Line Seperator Button
         Select Case UI(UI_ToggleButton_LineSeperator).Response
@@ -387,6 +400,15 @@ Sub MoveScrollToCursor (Y As Long)
         D = DestY - File(CurrentFile).ScrollOffset
         File(CurrentFile).ScrollOffset = File(CurrentFile).ScrollOffset + Sgn(D) * CeilDiv2(Abs(D), 2)
         If D = 0 Then DestY = 0
+End Sub
+Sub PushCursors
+        If ListStringLength(File(CurrentFile).CursorStack) = 0 Then File(CurrentFile).CursorStack = ListStringNew
+        If ListStringSearch(File(CurrentFile).CursorStack, File(CurrentFile).Cursors) = 0 Then ListStringInsert File(CurrentFile).CursorStack, File(CurrentFile).Cursors, 1
+End Sub
+Sub PopCursors
+        If ListStringLength(File(CurrentFile).CursorStack) = 0 Then Exit Sub
+        File(CurrentFile).Cursors = ListStringGet(File(CurrentFile).CursorStack, 1)
+        ListStringDelete File(CurrentFile).CursorStack, 1
 End Sub
 '----------------------------------
 
@@ -566,10 +588,13 @@ Sub DrawSummaryBar
 
 End Sub
 Sub DrawStatusBar
+        Static As Long LastKeyHit
+        If KeyHit Then If LastKeyHit <> KeyHit Then LastKeyHit = KeyHit
         Line (0, _Height - 16)-(_Width - 1, _Height - 1), _RGB32(0, 63, 127), BF
         If KeyCtrl Then T$ = " Ctrl "
         If KeyAlt Then T$ = T$ + " Alt "
         If KeyShift Then T$ = T$ + " Shift "
+        If InRange(32, LastKeyHit, 126) Then T$ = T$ + "(" + Chr$(LastKeyHit) + ")" Else T$ = T$ + "(" + _Trim$(Str$(LastKeyHit)) + ")"
         T$ = T$ + Console
         _PrintString (_Width - _SHL(Len(T$), 3), _Height - 16), T$
 End Sub
@@ -759,6 +784,7 @@ Sub OpenWorkspace (Path$)
                 OpenFile MapGetKey(FileMap$, "Path")
                 FileID = UBound(File)
                 File(FileID).Cursors = MapGetKey(FileMap$, "Cursors")
+                File(FileID).CursorStack = MapGetKey(FileMap$, "CursorStack")
                 File(FileID).ScrollOffset = CVL(MapGetKey(FileMap$, "ScrollOffset"))
         Next I
 End Sub
@@ -769,6 +795,7 @@ Sub SaveWorkspace (Path$)
                 FileMap$ = MapNew
                 MapSetKey FileMap$, "Path", File(I).Path
                 MapSetKey FileMap$, "Cursors", File(I).Cursors
+                MapSetKey FileMap$, "CursorStack", File(I).Cursors
                 MapSetKey FileMap$, "ScrollOffset", MKL$(File(I).ScrollOffset)
                 MapSetKey WorkspaceMap$, MKL$(I), FileMap$
         Next I
@@ -780,6 +807,20 @@ End Sub
 '--------------------------------------
 
 '----------------------------------------------------------------Libraries----------------------------------------------------------------
+Function SearchPreviousWord (Sentence As String, CurrentPosition As Long)
+        Dim As Long I
+        For I = CurrentPosition - 1 To 1 Step -1
+                If Asc(Sentence, I) <> 32 And Asc(Sentence, I + 1) = 32 Then SearchPreviousWord = I: Exit Function
+        Next I
+        SearchPreviousWord = 1
+End Function
+Function SearchNextWord (Sentence As String, CurrentPosition As Long)
+        Dim As Long I
+        For I = CurrentPosition To Len(Sentence) - 1
+                If Asc(Sentence, I) = 32 And Asc(Sentence, I + 1) <> 32 Then SearchNextWord = I + 1: Exit Function
+        Next I
+        SearchNextWord = Len(Sentence) + 1
+End Function
 Sub WaitForMouseButtonRelease
         While _MouseInput Or _MouseButton(1): Wend
 End Sub
@@ -1165,7 +1206,7 @@ Function ListStringFromString$ (ARRAY$)
                                 V$ = V$ + Chr$(BYTE~%%)
                         Case 44: If NEST~& = 0 Then
                                         __LISTLENGTH~& = __LISTLENGTH~& + 1
-                                        LIST$ = LIST$ + MKI$(Len(V$)) + V$
+                                        LIST$ = LIST$ + MKL$(Len(V$)) + V$
                                         V$ = ""
                                 Else
                                         V$ = V$ + Chr$(BYTE~%%)
@@ -1175,7 +1216,7 @@ Function ListStringFromString$ (ARRAY$)
                 End Select
         Next I~&
         If Len(V$) Then
-                LIST$ = LIST$ + MKI$(Len(V$)) + V$
+                LIST$ = LIST$ + MKL$(Len(V$)) + V$
                 __LISTLENGTH~& = __LISTLENGTH~& + 1
                 V$ = ""
         End If
@@ -1186,33 +1227,34 @@ End Function
 Function ListStringFromArray$ (ARRAY() As String, START_INDEX~&, END_INDEX~&)
         K~& = 0
         For I~& = START_INDEX~& To END_INDEX~&
-                K~& = K~& + 2 + Len(ARRAY(I~&))
+                K~& = K~& + 4 + Len(ARRAY(I~&))
         Next I~&
         LIST$ = Chr$(1) + MKL$(END_INDEX~& - START_INDEX~& + 1) + String$(K~&, 0)
         K~& = 6
         L~% = 0
         For I~& = START_INDEX~& To END_INDEX~&
                 L~% = Len(ARRAY(I~&))
-                Mid$(LIST$, K~&, 2 + L~%) = MKI$(L~%) + ARRAY(I~&)
-                K~& = K~& + L~% + 2
+                Mid$(LIST$, K~&, 4 + L~%) = MKL$(L~%) + ARRAY(I~&)
+                K~& = K~& + L~% + 4
         Next I~&
         ListStringFromArray$ = LIST$
         LIST$ = ""
 End Function
 Function ListStringPrint$ (LIST$)
+        Dim As Long O, T_OFFSET, I, L
         If Len(LIST$) < 5 Then Exit Function
         If Asc(LIST$) <> 1 Then Exit Function
         O = 6: T_OFFSET = 2
         T$ = String$(Len(LIST$) - 4, 0)
         Asc(T$) = 91 '[
         For I = 1 To CVL(Mid$(LIST$, 2, 4)) - 1
-                L = CVI(Mid$(LIST$, O, 2))
-                Mid$(T$, T_OFFSET, L + 1) = Mid$(LIST$, O + 2, L) + ","
+                L = CVL(Mid$(LIST$, O, 4))
+                Mid$(T$, T_OFFSET, L + 1) = Mid$(LIST$, O + 4, L) + ","
                 T_OFFSET = T_OFFSET + L + 1
-                O = O + L + 2
+                O = O + L + 4
         Next I
-        L = CVI(Mid$(LIST$, O, 2))
-        Mid$(T$, T_OFFSET, L + 1) = Mid$(LIST$, O + 2, L) + "]"
+        L = CVL(Mid$(LIST$, O, 4))
+        Mid$(T$, T_OFFSET, L + 1) = Mid$(LIST$, O + 4, L) + "]"
         ListStringPrint$ = Left$(T$, T_OFFSET + L)
 End Function
 Function ListStringLength~& (LIST$)
@@ -1223,73 +1265,79 @@ End Function
 Sub ListStringAdd (LIST$, ITEM$)
         If Len(LIST$) < 5 Then Exit Sub
         If Asc(LIST$) <> 1 Then Exit Sub
-        LIST$ = Chr$(1) + MKL$(CVL(Mid$(LIST$, 2, 4)) + 1) + Mid$(LIST$, 6) + MKI$(Len(ITEM$)) + ITEM$
+        LIST$ = Chr$(1) + MKL$(CVL(Mid$(LIST$, 2, 4)) + 1) + Mid$(LIST$, 6) + MKL$(Len(ITEM$)) + ITEM$
 End Sub
 Function ListStringGet$ (LIST$, POSITION As _Unsigned Long)
+        Dim As Long O, I, L
         If Len(LIST$) < 5 Then Exit Function
         If Asc(LIST$) <> 1 Then Exit Function
         If CVL(Mid$(LIST$, 2, 4)) < POSITION - 1 Then Exit Function
         O = 6
         For I = 1 To POSITION - 1
-                L = CVI(Mid$(LIST$, O, 2))
-                O = O + L + 2
+                L = CVL(Mid$(LIST$, O, 4))
+                O = O + L + 4
         Next I
-        ListStringGet$ = Mid$(LIST$, O + 2, CVI(Mid$(LIST$, O, 2)))
+        ListStringGet$ = Mid$(LIST$, O + 4, CVL(Mid$(LIST$, O, 4)))
 End Function
 Sub ListStringInsert (LIST$, ITEM$, POSITION As _Unsigned Long)
+        Dim As Long O, I, L
         If Len(LIST$) < 5 Then Exit Sub
         If Asc(LIST$) <> 1 Then Exit Sub
         If CVL(Mid$(LIST$, 2, 4)) < POSITION - 1 Then Exit Sub
         O = 6
         For I = 1 To POSITION - 1
-                L = CVI(Mid$(LIST$, O, 2))
-                O = O + L + 2
+                L = CVL(Mid$(LIST$, O, 4))
+                O = O + L + 4
         Next I
-        LIST$ = Chr$(1) + MKL$(CVL(Mid$(LIST$, 2, 4)) + 1) + Mid$(LIST$, 6, O - 6) + MKI$(Len(ITEM$)) + ITEM$ + Mid$(LIST$, O)
+        LIST$ = Chr$(1) + MKL$(CVL(Mid$(LIST$, 2, 4)) + 1) + Mid$(LIST$, 6, O - 6) + MKL$(Len(ITEM$)) + ITEM$ + Mid$(LIST$, O)
 End Sub
 Sub ListStringDelete (LIST$, POSITION As _Unsigned Long)
+        Dim As Long O, I, L
         If Len(LIST$) < 5 Then Exit Sub
         If Asc(LIST$) <> 1 Then Exit Sub
         If CVL(Mid$(LIST$, 2, 4)) < POSITION - 1 Then Exit Sub
         O = 6
         For I = 1 To POSITION - 1
-                L = CVI(Mid$(LIST$, O, 2))
-                O = O + L + 2
+                L = CVL(Mid$(LIST$, O, 4))
+                O = O + L + 4
         Next I
-        LIST$ = Chr$(1) + MKL$(CVL(Mid$(LIST$, 2, 4)) - 1) + Mid$(LIST$, 6, O - 6) + Mid$(LIST$, O + CVI(Mid$(LIST$, O, 2)) + 2)
+        LIST$ = Chr$(1) + MKL$(CVL(Mid$(LIST$, 2, 4)) - 1) + Mid$(LIST$, 6, O - 6) + Mid$(LIST$, O + CVL(Mid$(LIST$, O, 4)) + 4)
 End Sub
 Function ListStringSearch~& (LIST$, ITEM$)
+        Dim As Long O, I, L
         If Len(LIST$) < 5 Then Exit Function
         If Asc(LIST$) <> 1 Then Exit Function
         O = 6
         For I = 1 To CVL(Mid$(LIST$, 2, 4))
-                L = CVI(Mid$(LIST$, O, 2))
-                If ITEM$ = Mid$(LIST$, O + 2, L) Then ListStringSearch~& = I: Exit Function
-                O = O + L + 2
+                L = CVL(Mid$(LIST$, O, 4))
+                If ITEM$ = Mid$(LIST$, O + 4, L) Then ListStringSearch~& = I: Exit Function
+                O = O + L + 4
         Next I
         ListStringSearch~& = 0
 End Function
 Function ListStringSearchI~& (LIST$, ITEM$)
+        Dim As Long O, I, L
         If Len(LIST$) < 5 Then Exit Function
         If Asc(LIST$) <> 1 Then Exit Function
         O = 6
         For I = 1 To CVL(Mid$(LIST$, 2, 4))
-                L = CVI(Mid$(LIST$, O, 2))
-                If _StriCmp(ITEM$, Mid$(LIST$, O + 2, L)) = 0 Then ListStringSearchI~& = I: Exit Function
-                O = O + L + 2
+                L = CVL(Mid$(LIST$, O, 4))
+                If _StriCmp(ITEM$, Mid$(LIST$, O + 4, L)) = 0 Then ListStringSearchI~& = I: Exit Function
+                O = O + L + 4
         Next I
         ListStringSearchI~& = 0
 End Function
 Sub ListStringEdit (LIST$, ITEM$, POSITION As _Unsigned Long)
+        Dim As Long O, I, L
         If Len(LIST$) < 5 Then Exit Sub
         If Asc(LIST$) <> 1 Then Exit Sub
         If CVL(Mid$(LIST$, 2, 4)) < POSITION - 1 Then Exit Sub
         O = 6
         For I = 1 To POSITION - 1
-                L = CVI(Mid$(LIST$, O, 2))
-                O = O + L + 2
+                L = CVL(Mid$(LIST$, O, 4))
+                O = O + L + 4
         Next I
-        LIST$ = Left$(LIST$, O - 1) + MKI$(Len(ITEM$)) + ITEM$ + Mid$(LIST$, O + CVI(Mid$(LIST$, O, 2)) + 2)
+        LIST$ = Left$(LIST$, O - 1) + MKL$(Len(ITEM$)) + ITEM$ + Mid$(LIST$, O + CVL(Mid$(LIST$, O, 4)) + 4)
 End Sub
 Function ListStringAppend$ (LIST1$, LIST2$)
         If Len(LIST1$) < 5 Then Exit Function
@@ -1374,4 +1422,3 @@ Sub MapDeleteKey (__MAP$, __KEY$)
         Next __I~&
         If __BOOL` Then __MAP$ = Chr$(8) + MKL$(__LENGTH~& - 1) + Mid$(__MAP$, 6, __OFFSET~& - 6) + Mid$(__MAP$, __OFFSET~& + 8 + __LEN_KEY~& + __LEN_VALUE~&)
 End Sub
-'-----------------------------------------------------------------------------------------------------------------------------------------
