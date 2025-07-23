@@ -269,10 +269,11 @@ Do
                                                 CursorX = 1
                                                 CursorY = File(CurrentFile).TotalLines
                                                 MoveScrollToCursor Max(1, File(CurrentFile).TotalLines - VerticalLinesVisible)
+                                                File(CurrentFile).HorizontalScrollOffset = 1
                                         Else
                                                 CursorX = Len(Rope(RopeI)) + 1
+                                                File(CurrentFile).HorizontalScrollOffset = Max(1, Len(Rope(RopeI)) + 1 - _SHR(HorizontalCharsVisible, 1))
                                         End If
-                                        File(CurrentFile).HorizontalScrollOffset = Max(1, Len(Rope(RopeI)) + 1 - _SHR(HorizontalCharsVisible, 1))
                                 Case 21248 'Delete
                                         If KeyCtrl Then
                                                 DeleteLine CursorY
@@ -294,6 +295,7 @@ Do
                                 CursorX = Clamp(1, CursorX, Len(Rope(RopeI)) + 1)
                                 CursorY = Clamp(1, CursorY, File(CurrentFile).TotalLines)
                                 ShowCursorTime = Timer(0.1) + 1
+                                If I = 1 And InRange(File(CurrentFile).ScrollOffset, CursorY, File(CurrentFile).ScrollOffset + VerticalLinesVisible) Then File(CurrentFile).HorizontalScrollOffset = Clamp(Max(1, CursorX - _SHR(HorizontalCharsVisible, 1)), File(CurrentFile).HorizontalScrollOffset, CursorX + _SHR(HorizontalCharsVisible, 1))
                         End If
                         Mid$(File(CurrentFile).Cursors, I, 4) = MKL$(CursorX)
                         Mid$(File(CurrentFile).Cursors, I + 4, 4) = MKL$(CursorY)
@@ -338,7 +340,7 @@ Do
         'Toggle Summary Bar
         If UI(UI_MenuButton_View).Response = 4 Or (KeyAlt And (KeyHit = 66 Or KeyHit = 98)) Then Summary_Bar = 1 - Summary_Bar
         'Go to Next Cursor
-        If UI(UI_MenuButton_Cursors).Response = 1 Or UI(UI_Label_CursorPosition).Response Or (KeyAlt And (KeyHit = 88 Or KeyHit = 120)) Then
+        If CurrentFile And (UI(UI_MenuButton_Cursors).Response = 1 Or UI(UI_Label_CursorPosition).Response Or (KeyAlt And (KeyHit = 88 Or KeyHit = 120))) Then
                 File(CurrentFile).CurrentCursor = ClampCycle(1, File(CurrentFile).CurrentCursor + 1, _SHR(Len(File(CurrentFile).Cursors), 3))
                 File(CurrentFile).ScrollOffset = CVL(Mid$(File(CurrentFile).Cursors, _SHL(File(CurrentFile).CurrentCursor, 3) - 3, 4))
                 UI_Focus = 0
