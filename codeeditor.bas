@@ -87,18 +87,28 @@ Dim Shared As Integer UI_Side_Pane
 UI_Side_Pane = UI_New("UI_Side_Pane", UI_TYPE_Frame, 0, 17, 16, -16, "", "")
 UI_Set_BG _RGB32(47)
 '---------------------------
+'-------- File Dialog --------
+Dim Shared As Integer UI_Dialog_File
+FileDialog "", "" 'First Run
+'-----------------------------
 '-------- Open File Dialog --------
-Dim Shared As Integer UI_Dialog_OpenFile
+Dim Shared UI_Dialog_OpenFile_Visible As Integer, OpenFileCurrentDirectory As String
+OpenFileCurrentDirectory = _StartDir$
 OpenFileDialog 'First Run
 '----------------------------------
 '-------- Save As Dialog --------
-Dim Shared As Integer UI_Dialog_SaveFileAs
+Dim Shared UI_Dialog_SaveFileAs_Visible As Integer, SaveFileAsCurrentDirectory As String
+SaveFileAsCurrentDirectory = _StartDir$
 SaveFileAsDialog 'First Run
 '--------------------------------
 '-------- Go to Line Dialog --------
 Dim Shared As Integer UI_Dialog_GoToLine
 GoToLineDialog 'First Run
 '-----------------------------------
+'-------- File Not Dialog --------
+Dim Shared As Integer UI_FileNotSavedDialog, UI_FileNotSavedDialog_FileName
+FileNotSavedDialog 'First Run
+'---------------------------------
 
 Dim Shared As Long MainScreen, tmpScreen
 MainScreen = _NewImage(960, 540, 32)
@@ -169,9 +179,10 @@ Do
                 If Summary_Bar Then DrawSummaryBar
                 If UI(UI_Side_Pane).W >= 128 Then DrawSidePane
         End If
-        If UI(UI_Dialog_OpenFile).Visible Then
+        UI(UI_Dialog_File).Visible = UI_Dialog_OpenFile_Visible Or UI_Dialog_SaveFileAs_Visible
+        If UI_Dialog_OpenFile_Visible Then
                 OpenFileDialog
-        ElseIf UI(UI_Dialog_SaveFileAs).Visible Then
+        ElseIf UI_Dialog_SaveFileAs_Visible Then
                 SaveFileAsDialog
         ElseIf UI(UI_Dialog_GoToLine).Visible Then
                 GoToLineDialog
@@ -183,6 +194,7 @@ Do
                 If KeyAlt And Len(File(CurrentFile).Cursors) = 8 Then
                         If KeyShift And Left$(Console, 1) <> "-" Then Console = "-" + Console
                         If InRange(48, KeyHit, 57) Then Console = Console + Chr$(KeyHit)
+                        If KeyHit = 8 Then Console = Left$(Console, Len(Console) - 1)
                 Else
                         If LastKeyAlt And Len(File(CurrentFile).Cursors) = 8 Then
                                 SetCursor GetCursorX, GetCursorY + Val(Console)
@@ -233,6 +245,7 @@ Do
                                         Else
                                                 CursorX = Max(CursorX - 1, 1)
                                         End If
+                                        BoundCursor = True
                                 Case 19712 'Right
                                         If KeyAlt Then
                                                 File(CurrentFile).HorizontalScrollOffset = Min(File(CurrentFile).HorizontalScrollOffset + 3, Len(Rope(RopeI)) + 1)
@@ -241,6 +254,7 @@ Do
                                         Else
                                                 CursorX = Min(CursorX + 1, Len(Rope(RopeI)) + 1)
                                         End If
+                                        BoundCursor = True
                                 Case 18432 'Up
                                         If KeyCtrl Then
                                                 File(CurrentFile).ScrollOffset = Max(1, File(CurrentFile).ScrollOffset - 1)
@@ -261,7 +275,7 @@ Do
                                 Case 20736 'PgDn
                                         CursorY = Min(CursorY + VerticalLinesVisible, File(CurrentFile).TotalLines)
                                         If CursorY > File(CurrentFile).ScrollOffset + VerticalLinesVisible Then File(CurrentFile).ScrollOffset = Max(1, CursorY - VerticalLinesVisible)
-                                Case 19200, 19712, 18432, 20480, 18688, 19712: MoveScrollToCursor -1: BoundCursor = True
+                                Case 19200, 19712, 18432, 20480, 18688, 19712: MoveScrollToCursor -1
                                 Case 18176 'Home
                                         If KeyCtrl Then
                                                 CursorX = 1: CursorY = 1
@@ -324,11 +338,11 @@ Do
         'New File
         If UI(UI_MenuButton_File).Response = 1 Or (KeyCtrl And (KeyHit = 78 Or KeyHit = 110)) Then NewFile
         'Open File
-        If UI(UI_MenuButton_File).Response = 2 Or (KeyCtrl And (KeyHit = 79 Or KeyHit = 111)) Then UI(UI_Dialog_OpenFile).Visible = -1: UI_Focus = UI_Dialog_OpenFile
+        If UI(UI_MenuButton_File).Response = 2 Or (KeyCtrl And (KeyHit = 79 Or KeyHit = 111)) Then UI_Dialog_OpenFile_Visible = -1: UI_Focus = UI_Dialog_File
         'Save File
         If UI(UI_MenuButton_File).Response = 3 Or (KeyCtrl And KeyShift = 0 And KeyAlt = 0 And (KeyHit = 83 Or KeyHit = 115)) Then SaveFile CurrentFile
         'Save As File
-        If UI(UI_MenuButton_File).Response = 4 Or (KeyCtrl And KeyShift And (KeyHit = 83 Or KeyHit = 115)) Then UI(UI_Dialog_SaveFileAs).Visible = -1: UI_Focus = UI_Dialog_SaveFileAs
+        If UI(UI_MenuButton_File).Response = 4 Or (KeyCtrl And KeyShift And (KeyHit = 83 Or KeyHit = 115)) Then UI_Dialog_SaveFileAs_Visible = -1: UI_Focus = UI_Dialog_File
         'Close File
         If UI(UI_MenuButton_File).Response = 5 Or (KeyCtrl And (KeyHit = 87 Or KeyHit = 119)) Then CloseFile CurrentFile
         'Exit
@@ -472,74 +486,87 @@ Sub UpdateRope (I As Long) Static
 End Sub
 '---------------------------------
 
-Sub OpenFileDialog
-        Static As Integer UI_Dialog_OpenFile_ListView_Dir, UI_Dialog_OpenFile_TextView_Dir, UI_Dialog_OpenFile_Button_Open, UI_Dialog_OpenFile_Button_Cancel
-        Static CurrentDirectory As String
-        If UI_Dialog_OpenFile = 0 Then
-                UI_Dialog_OpenFile = UI_New("UI_Dialog_OpenFile", UI_TYPE_Dialog, 0, 0, -128, -128, "Open File", "")
+Sub FileDialog (T$, D$)
+        Static As Integer ListView, TextView, ButtonOpen, ButtonCancel, LastVisibility
+        If UI_Dialog_File = 0 Then
+                UI_Dialog_File = UI_New("UI_Dialog_File", UI_TYPE_Dialog, 0, 0, -128, -128, "File", "")
                 UI_Set_FG -1
-                UI(UI_Dialog_OpenFile).Visible = 0
-                UI_PARENT = UI_Dialog_OpenFile
-                UI_Dialog_OpenFile_ListView_Dir = UI_New("UI_Dialog_OpenFile_ListView_Dir", UI_TYPE_ListView, 16, 64, -16, -32, "", "")
+                UI(UI_Dialog_File).Visible = 0
+                UI_PARENT = UI_Dialog_File
+                ListView = UI_New("UI_Dialog_File_ListView", UI_TYPE_ListView, 16, 64, -16, -32, "", "")
                 UI_Set_BG _RGB32(0, 191, 0)
-                UI_Dialog_OpenFile_TextView_Dir = UI_New("UI_Dialog_OpenFile_TextView_Dir", UI_TYPE_TextView, 16, 40, -16, 16, "", "")
-                UI_Dialog_OpenFile_Button_Open = UI_New("UI_Dialog_OpenFile_Button_Open", UI_TYPE_Button, -128, -24, 48, 16, " Open ", "")
-                UI_Dialog_OpenFile_Button_Cancel = UI_New("UI_Dialog_OpenFile_Button_Cancel", UI_TYPE_Button, -64, -24, 48, 16, "Cancel", "")
+                TextView = UI_New("UI_Dialog_File_TextView", UI_TYPE_TextView, 16, 40, -16, 16, "", "")
+                ButtonOpen = UI_New("UI_Dialog_File_ButtonOpen", UI_TYPE_Button, -128, -24, 48, 16, " Open ", "")
+                ButtonCancel = UI_New("UI_Dialog_File_ButtonCancel", UI_TYPE_Button, -64, -24, 48, 16, "Cancel", "")
                 UI_PARENT = 0
-                CurrentDirectory = _StartDir$
                 Exit Sub
         End If
         Update = 0
-        If UI_Focus = 0 Then UI(UI_Dialog_OpenFile).Visible = 0
-        Select Case UI(UI_Dialog_OpenFile_TextView_Dir).Response
-                Case 13: If _DirExists(UI(UI_Dialog_OpenFile_TextView_Dir).Content) Then
-                                CurrentDirectory = UI(UI_Dialog_OpenFile_TextView_Dir).Content
+        If UI(UI_Dialog_File).Visible <> LastVisibility Then Update = 1
+        LastVisibility = UI(UI_Dialog_File).Visible
+        UI(UI_Dialog_File).Label = T$
+        If UI_Focus = 0 Then UI(UI_Dialog_File).Visible = 0: UI(UI_Dialog_File).Response = -1
+        Select Case UI(TextView).Response
+                Case 13: If _DirExists(UI(TextView).Content) Then
+                                D$ = UI(TextView).Content
                                 Update = 1
-                        ElseIf _FileExists(UI(UI_Dialog_OpenFile_TextView_Dir).Content) Then
-                                OpenFile UI(UI_Dialog_OpenFile_TextView_Dir).Content
-                                CurrentDirectory = UI(UI_Dialog_OpenFile_TextView_Dir).Content
+                        Else
+                                UI(UI_Dialog_File).Content = UI(TextView).Content
+                                UI(UI_Dialog_File).Response = 1
                                 Update = 1
-                                UI(UI_Dialog_OpenFile).Visible = 0
+                                UI(UI_Dialog_File).Visible = 0
                                 UI_Focus = 0
                         End If
         End Select
-        If Len(UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent) = 0 Then Update = 1
-        Select Case UI(UI_Dialog_OpenFile_ListView_Dir).Selected
+        If Len(UI(ListView).ParsedContent) = 0 Then Update = 1
+        Select Case UI(ListView).Selected
                 Case 0
                 Case 1
-                        CurrentDirectory = PathBack$(CurrentDirectory)
+                        D$ = PathBack$(D$)
                         Update = 1
                 Case Else
-                        If _DirExists(CurrentDirectory + ListStringGet(UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent, UI(UI_Dialog_OpenFile_ListView_Dir).Selected)) Then
-                                CurrentDirectory = CurrentDirectory + ListStringGet(UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent, UI(UI_Dialog_OpenFile_ListView_Dir).Selected)
+                        If _DirExists(D$ + ListStringGet(UI(ListView).ParsedContent, UI(ListView).Selected)) Then
+                                D$ = D$ + ListStringGet(UI(ListView).ParsedContent, UI(ListView).Selected)
                                 Update = 1
                         End If
         End Select
-        If UI(UI_Dialog_OpenFile_Button_Open).Response Then
-                OpenFile CurrentDirectory + ListStringGet(UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent, UI(UI_Dialog_OpenFile_ListView_Dir).Selected)
+        If UI(ButtonOpen).Response Then
                 Update = 1
-                UI(UI_Dialog_OpenFile).Visible = 0
+                UI(UI_Dialog_File).Content = D$ + ListStringGet(UI(ListView).ParsedContent, UI(ListView).Selected)
+                UI(UI_Dialog_File).Visible = 0
+                UI(UI_Dialog_File).Response = 1
                 UI_Focus = 0
         End If
-        If UI(UI_Dialog_OpenFile_Button_Cancel).Response Then
-                UI(UI_Dialog_OpenFile).Visible = 0
+        If UI(ButtonCancel).Response Then
+                UI(UI_Dialog_File).Content = ""
+                UI(UI_Dialog_File).Visible = 0
+                UI(UI_Dialog_File).Response = 2
                 UI_Focus = 0
         End If
         If Update Then
-                UI(UI_Dialog_OpenFile_ListView_Dir).ParsedContent = ListStringAppend(ListStringFromString(".."), GetDirList$(CurrentDirectory))
-                UI(UI_Dialog_OpenFile_ListView_Dir).Selected = 0
-                If UI_Focus <> UI_Dialog_OpenFile_TextView_Dir Then UI(UI_Dialog_OpenFile_TextView_Dir).Content = CurrentDirectory
+                UI(ListView).ParsedContent = ListStringAppend(ListStringFromString(".."), GetDirList$(D$))
+                UI(ListView).Selected = 0
+                If UI_Focus <> TextView Then UI(TextView).Content = D$
         End If
 End Sub
+Sub OpenFileDialog
+        If UI_Dialog_OpenFile_Visible Then FileDialog "Open File", OpenFileCurrentDirectory
+        Select EveryCase UI(UI_Dialog_File).Response
+                Case -1, 1, 2: UI_Dialog_OpenFile_Visible = 0
+                        UI(UI_Dialog_File).Visible = -1
+                Case 1: OpenFile UI(UI_Dialog_File).Content
+                Case 0: UI(UI_Dialog_File).Visible = -1
+        End Select
+End Sub
 Sub SaveFileAsDialog
-        If UI_Dialog_SaveFileAs = 0 Then
-                UI_Dialog_SaveFileAs = UI_New("UI_Dialog_SaveFileAs", UI_TYPE_Dialog, 0, 0, -128, -128, "Save As File", "")
-                UI_Set_FG -1
-                UI(UI_Dialog_SaveFileAs).Visible = 0
-                UI_PARENT = UI_Dialog_SaveFileAs
-                UI_PARENT = 0
-                Exit Sub
-        End If
+        If UI_Dialog_SaveFileAs_Visible Then FileDialog "Save As File", SaveFileAsCurrentDirectory
+        Select EveryCase UI(UI_Dialog_File).Response
+                Case -1, 1, 2: UI_Dialog_SaveFileAs_Visible = 0
+                        UI(UI_Dialog_File).Visible = -1
+                Case 1: File(CurrentFile).Path = UI(UI_Dialog_File).Content
+                        SaveFile CurrentFile
+                Case 0: UI(UI_Dialog_File).Visible = -1
+        End Select
 End Sub
 Sub GoToLineDialog
         Static As Integer TextView, Button_Ok, Button_Cancel
@@ -558,6 +585,24 @@ Sub GoToLineDialog
         UI_Focus = TextView
         If UI(Button_Ok).Response Then SetCursor 1, Val(UI(TextView).Content): File(CurrentFile).ScrollOffset = Val(UI(TextView).Content): UI(UI_Dialog_GoToLine).Visible = 0: UI_Focus = 0
         If UI(Button_Cancel).Response Then UI(UI_Dialog_GoToLine).Visible = 0: UI_Focus = 0
+End Sub
+Sub FileNotSavedDialog
+        Static As Integer UI_FileNotSavedDialog_Button_Save, UI_FileNotSavedDialog_Button_DontSave, UI_FileNotSavedDialog_Button_Cancel
+        If UI_FileNotSavedDialog = 0 Then
+                UI_FileNotSavedDialog = UI_New("UI_FileNotSavedDialog", UI_TYPE_Dialog, 0, 0, 128, 64, "File Not Saved", "")
+                UI_PARENT = UI_FileNotSavedDialog
+                UI_FileNotSavedDialog_FileName = UI_New("UI_FileNotSavedDIalog_FileName", UI_TYPE_Label, 8, 16, -8, 16, "", "")
+                UI_FileNotSavedDialog_Button_Save = UI_New("UI_FileNotSavedDialogg_Button_Save", UI_TYPE_Button, 8, 40, 32, 16, "Save", "")
+                UI_FileNotSavedDialog_Button_DontSave = UI_New("UI_FileNotSavedDialog_Button_DontSave", UI_TYPE_Button, 48, 40, 160, 16, "Don't Save", "")
+                UI_FileNotSavedDialog_Button_Cancel = UI_New("UI_FileNotSavedDialog_Button_Cancel", UI_TYPE_Button, -56, 40, 48, 16, "Cancel", "")
+                UI_PARENT = 0
+                UI(UI_FileNotSavedDialog).Visible = 0
+                Exit Sub
+        End If
+        If UI(UI_FileNotSavedDialog).Visible = 0 Then Exit Sub
+        If UI(UI_FileNotSavedDialog_Button_Save).Response Then UI(UI_FileNotSavedDialog).Response = 1: UI(UI_FileNotSavedDialog).Visible = 0
+        If UI(UI_FileNotSavedDialog_Button_DontSave).Response Then UI(UI_FileNotSavedDialog).Response = 2: UI(UI_FileNotSavedDialog).Visible = 0
+        If UI(UI_FileNotSavedDialog_Button_Cancel).Response Then UI(UI_FileNotSavedDialog).Response = 3: UI(UI_FileNotSavedDialog).Visible = 0
 End Sub
 Sub DrawMenuBar
         Static As Integer ListView, ScrollBar
@@ -597,8 +642,9 @@ Sub DrawStatusBar
         If KeyCtrl Then T$ = " Ctrl "
         If KeyAlt Then T$ = T$ + " Alt "
         If KeyShift Then T$ = T$ + " Shift "
-        If InRange(32, LastKeyHit, 126) Then T$ = T$ + "(" + Chr$(LastKeyHit) + ")" Else T$ = T$ + "(" + _Trim$(Str$(LastKeyHit)) + ")"
         T$ = T$ + Console
+        If InRange(32, LastKeyHit, 126) Then K$ = "(" + Chr$(LastKeyHit) + ")" Else K$ = "(" + _Trim$(Str$(LastKeyHit)) + ")"
+        T$ = T$ + Space$(8 - Len(K$)) + K$
         _PrintString (_Width - _SHL(Len(T$), 3), _Height - 16), T$
 End Sub
 Sub DrawSidePane
@@ -790,6 +836,8 @@ Sub OpenWorkspace (Path$)
                 File(FileID).CursorStack = MapGetKey(FileMap$, "CursorStack")
                 File(FileID).ScrollOffset = CVL(MapGetKey(FileMap$, "ScrollOffset"))
         Next I
+        OpenFileCurrentDirectory = PathBack$(Path$)
+        SaveFileAsCurrentDirectory = PathBack$(Path$)
 End Sub
 Sub SaveWorkspace (Path$)
         WorkspaceMap$ = MapNew
