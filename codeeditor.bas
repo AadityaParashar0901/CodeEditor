@@ -38,6 +38,7 @@ Const UI_PROP_Center = 17
 Const UI_KEY_Visible = 33, UI_KEY_Focus = 34, UI_KEY_Visible_And_Focus = 35
 Dim Shared UI(0) As UI, UI_PARENT As _Unsigned Integer, UI_Focus_Parent As _Unsigned Integer, UI_Focus As _Unsigned Integer, UI_MouseWheel As Integer
 Dim Shared As _Byte KeyCtrl, KeyAlt, KeyShift: Dim Shared KeyHit As Long
+Dim Shared As _Byte ScreenZoom
 '--------------------
 
 Dim Shared As String SaveFileQueue
@@ -54,10 +55,10 @@ UI_Set_KeyMaps 100308, 70, 100307, 102
 UI_MenuButton_Workspace = UI_New("UI_MenuButton_Workspace", UI_TYPE_MenuButton, 48, 0, 88, 16, " Workspace ", ListStringFromString("\Open Workspace,\Save Workspace|Ctrl+Alt+S"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 87, 100307, 119
-UI_MenuButton_View = UI_New("UI_MenuButton_View", UI_TYPE_MenuButton, 136, 0, 48, 16, " View ", ListStringFromString("Go to \File,Go to \Line|Ctrl+G,\Toggle Side Pane|Alt+T,Toggle Summary Bar|Alt+B"))
+UI_MenuButton_View = UI_New("UI_MenuButton_View", UI_TYPE_MenuButton, 136, 0, 48, 16, " View ", ListStringFromString("Go to \File,Go to \Line|Ctrl+G,\Toggle Side Pane|Alt+T,Toggle \Summary Bar|Alt+B,Screen \Zoom"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 86, 100307, 118
-TMP_LIST_STRING$ = ListStringFromString("Go to \Next Cursor|Alt+X,Set Cursor to Center|F8"): ListStringAdd TMP_LIST_STRING$, "Push Cursors|Ctrl+[": ListStringAdd TMP_LIST_STRING$, "Pop Cursors|Ctrl+]"
+TMP_LIST_STRING$ = ListStringFromString("Go to \Next Cursor|Alt+X,Set Cursor to \Center|F8"): ListStringAdd TMP_LIST_STRING$, "P\ush Cursors|Ctrl+[": ListStringAdd TMP_LIST_STRING$, "P\op Cursors|Ctrl+]"
 UI_MenuButton_Cursors = UI_New("UI_MenuButton_Cursors", UI_TYPE_MenuButton, 184, 0, 72, 16, " Cursors ", TMP_LIST_STRING$): TMP_LIST_STRING$ = ""
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 67, 100307, 99
@@ -162,7 +163,7 @@ Do
         DrawMenuBar
         DrawStatusBar
         If CurrentFile Then
-                TextOffsetX = UI(UI_Side_Pane).W + 8 * ceil(Log(Max(1, File(CurrentFile).TotalLines)) / Log(10) + 2)
+                TextOffsetX = UI(UI_Side_Pane).W + _SHL(ceil(Log(Max(1, File(CurrentFile).TotalLines)) / Log(10) + 2), 3 + ScreenZoom)
                 MoveScrollToCursor 0
                 DrawText
                 If Summary_Bar Then DrawSummaryBar
@@ -177,7 +178,7 @@ Do
         ElseIf UI_Focus = 0 And CurrentFile Then 'Handle Text Area
                 If UI(UI_ScrollBar_Text).Response Then File(CurrentFile).ScrollOffset = UI(UI_ScrollBar_Text).Scroll
                 If _MouseButton(1) And MouseInBox(0, 16, _Width - 9, _Height - 17) Then
-                        If KeyAlt Then AddCursor _SHR(_MouseX - TextOffsetX, 3) + File(CurrentFile).HorizontalScrollOffset, _SHR(_MouseY - TextOffsetY, 4) + File(CurrentFile).ScrollOffset Else SetCursor _SHR(_MouseX - TextOffsetX, 3) + File(CurrentFile).HorizontalScrollOffset, _SHR(_MouseY - TextOffsetY, 4) + File(CurrentFile).ScrollOffset
+                        If KeyAlt Then AddCursor _SHR(_MouseX - TextOffsetX, 3 + ScreenZoom) + File(CurrentFile).HorizontalScrollOffset, _SHR(_MouseY - TextOffsetY, 4 + ScreenZoom) + File(CurrentFile).ScrollOffset Else SetCursor _SHR(_MouseX - TextOffsetX, 3 + ScreenZoom) + File(CurrentFile).HorizontalScrollOffset, _SHR(_MouseY - TextOffsetY, 4 + ScreenZoom) + File(CurrentFile).ScrollOffset
                 End If
                 If KeyAlt And Len(File(CurrentFile).Cursors) = 8 Then
                         If KeyShift And Left$(Console, 1) <> "-" Then Console = "-" + Console
@@ -308,9 +309,9 @@ Do
                         'Display Cursor
                         If ShowCursor = 0 And Timer(0.1) > ShowCursorTime Then _Continue
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
-                        X = TextOffsetX + _SHL(Min(CursorX, Len(Rope(RopeI)) + 1) - File(CurrentFile).HorizontalScrollOffset, 3)
-                        Y = TextOffsetY + _SHL(CursorY - File(CurrentFile).ScrollOffset, 4)
-                        Line (X, Y)-(X + 7, Y + 15), -1, B
+                        X = TextOffsetX + _SHL(Min(CursorX, Len(Rope(RopeI)) + 1) - File(CurrentFile).HorizontalScrollOffset, 3 + ScreenZoom)
+                        Y = TextOffsetY + _SHL(CursorY - File(CurrentFile).ScrollOffset, 4 + ScreenZoom)
+                        Line (X, Y)-(X + _SHL(1, 3 + ScreenZoom) - 1, Y + _SHL(1, 4 + ScreenZoom) - 1), -1, B
                 Next I
                 Select Case KeyHit
                         Case 9: If KeyCtrl Then CurrentFile = ClampCycle(LBound(File), CurrentFile + 1, UBound(File)) 'Ctrl Tab
@@ -344,6 +345,8 @@ Do
         If UI(UI_MenuButton_View).Response = 3 Or (KeyAlt And (KeyHit = 84 Or KeyHit = 116)) Then UI(UI_Side_Pane).W = 272 - UI(UI_Side_Pane).W
         'Toggle Summary Bar
         If UI(UI_MenuButton_View).Response = 4 Or (KeyAlt And (KeyHit = 66 Or KeyHit = 98)) Then Summary_Bar = 1 - Summary_Bar
+        'Screen Zoom
+        If UI(UI_MenuButton_View).Response = 5 Then ScreenZoom = 1 - ScreenZoom
         'Go to Next Cursor
         If CurrentFile And (UI(UI_MenuButton_Cursors).Response = 1 Or UI(UI_Label_CursorPosition).Response Or (KeyAlt And (KeyHit = 88 Or KeyHit = 120))) Then
                 File(CurrentFile).CurrentCursor = ClampCycle(1, File(CurrentFile).CurrentCursor + 1, _SHR(Len(File(CurrentFile).Cursors), 3))
@@ -606,8 +609,8 @@ Sub DrawSidePane
         LastCurrentFile = CurrentFile
 End Sub
 Sub DrawText
-        VerticalLinesVisible = _SHR(_Height - 32, 4) - 1
-        HorizontalCharsVisible = _SHR(_Width - TextOffsetX, 3) - Summary_Bar * 8
+        VerticalLinesVisible = _SHR(_Height - 32, 4 + ScreenZoom) - 1
+        HorizontalCharsVisible = _SHR(_Width - TextOffsetX, 3 + ScreenZoom) - Summary_Bar * 8
         J = TextOffsetY
         For I = File(CurrentFile).ScrollOffset To Min(File(CurrentFile).ScrollOffset + VerticalLinesVisible, File(CurrentFile).TotalLines)
                 If InRange(1, I, File(CurrentFile).TotalLines) = 0 Then _Continue
@@ -615,9 +618,9 @@ Sub DrawText
                 If KeyAlt And GetCursorY <> I And Len(File(CurrentFile).Cursors) = 8 Then L~& = Abs(I - GetCursorY) Else L~& = I
                 L$ = _Trim$(Str$(L~&))
                 T$ = Mid$(Rope(K), File(CurrentFile).HorizontalScrollOffset)
-                L$ = Space$(_SHR(TextOffsetX, 3) - Len(L$) - 1) + L$ + Chr$(179) + Left$(T$, HorizontalCharsVisible)
-                _PrintString (0, J), L$
-                J = J + 16
+                L$ = Space$(_SHR(TextOffsetX, 3 + ScreenZoom) - Len(L$) - 1) + L$ + Chr$(179) + Left$(T$, HorizontalCharsVisible)
+                If ScreenZoom Then PrintStringZoom 0, J, L$ Else _PrintString (0, J), L$
+                J = J + _SHL(1, 4 + ScreenZoom)
         Next I
 End Sub
 
@@ -824,8 +827,29 @@ End Function
 Sub WaitForMouseButtonRelease
         While _MouseInput Or _MouseButton(1): Wend
 End Sub
-Sub PrintString (X As Integer, Y As Integer, S As String)
-        _PrintString (X, Y), S
+Sub PrintString (X As Integer, Y As Integer, T$) Static
+        _PrintString (X, Y), T$
+End Sub
+Sub PrintStringZoom (X As Integer, Y As Integer, T$) Static ', Colour As Long) Static
+        Static As Long FontImage
+        If FontImage = 0 Then
+                FontImage = _NewImage(128, 256, 32)
+                _DontBlend FontImage
+                Cls , 0
+                _Dest FontImage
+                For X = 0 To 15
+                        For Y = 0 To 15
+                                _PrintString (_SHL(X, 3), _SHL(Y, 4)), Chr$(ClampCycle(0, _SHL(Y, 4) + X, 255))
+                Next Y, X
+                _Dest 0
+        End If
+        Dim As _Unsigned Long I
+        For I = 1 To Len(T$)
+                B~%% = Asc(T$, I)
+                __Y~% = _SHR(B~%%, 4)
+                __X~% = B~%% - _SHL(__Y~%, 4)
+                _PutImage (X + _SHL(I - 1, 4), Y)-(X + _SHL(I - 1, 4) + 15, Y + 31), FontImage, , (_SHL(__X~%, 3), _SHL(__Y~%, 4))-(_SHL(__X~%, 3) + 7, _SHL(__Y~%, 4) + 15)
+        Next I
 End Sub
 Function GetLastPathName$ (Path$)
         T~& = _InStrRev(Path$, FILE_SEPERATOR) + 1
