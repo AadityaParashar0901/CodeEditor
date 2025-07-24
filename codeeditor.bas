@@ -43,7 +43,10 @@ Dim Shared As _Byte ScreenZoom
 
 Dim Shared As String SaveFileQueue
 
-Dim Shared Config$, Config_BackgroundColor As Long, Config_TextColor As Long, Config_CurrentWorkspace As String, Config_FileSeperator As String, Config_OpenFileSpeed As _Unsigned Long
+Dim Shared Config$
+Dim Shared As Long Config_BackgroundColor, Config_TextColor
+Dim Shared As _Unsigned Long Config_OpenFileSpeed
+Dim Shared As String Config_CurrentWorkspace, Config_FileSeperator, Config_EditorFont
 NewConfig
 CreateConfig
 ReadConfigFile
@@ -116,6 +119,15 @@ Screen MainScreen
 Do Until _ScreenExists: Loop
 While _Resize: Wend
 
+'-------- Font --------
+Dim Shared As Long EditorFont_Size_16, EditorFont_Size_32
+If _FileExists(Config_EditorFont) Then
+        EditorFont_Size_16 = _LoadFont(Config_EditorFont, 16, "monospace")
+        EditorFont_Size_32 = _LoadFont(Config_EditorFont, 32, "monospace")
+End If
+SetFont EditorFont_Size_16
+'----------------------
+
 _AcceptFileDrop
 
 Color Config_TextColor, 0
@@ -135,6 +147,7 @@ Do
         If _Resize Then
                 tmpW = _ResizeWidth: tmpH = _ResizeHeight
                 If tmpW > 0 And tmpH > 0 Then tmpScreen = MainScreen: MainScreen = _NewImage(tmpW, tmpH, 32): Screen MainScreen: _FreeImage tmpScreen
+                SetFont EditorFont_Size_16
         End If
         If _TotalDroppedFiles Then
                 For I = 1 To _TotalDroppedFiles
@@ -389,6 +402,9 @@ Do
         If _Exit Then Exit Do
 Loop
 WriteConfigFile
+_Font 16
+If EditorFont_Size_16 > 0 Then _FreeFont EditorFont_Size_16
+If EditorFont_Size_32 > 0 Then _FreeFont EditorFont_Size_32
 System
 
 '------- Cursor Management --------
@@ -658,6 +674,7 @@ Sub DrawText
         VerticalLinesVisible = _SHR(_Height - 32, 4 + ScreenZoom) - 1
         HorizontalCharsVisible = _SHR(_Width - TextOffsetX, 3 + ScreenZoom) - Summary_Bar * 8
         J = TextOffsetY
+        If ScreenZoom Then SetFont EditorFont_Size_32 Else SetFont EditorFont_Size_16
         For I = File(CurrentFile).ScrollOffset To Min(File(CurrentFile).ScrollOffset + VerticalLinesVisible, File(CurrentFile).TotalLines)
                 If InRange(1, I, File(CurrentFile).TotalLines) = 0 Then _Continue
                 K = CVL(Mid$(File(CurrentFile).Content, I * 4 - 3, 4))
@@ -665,9 +682,13 @@ Sub DrawText
                 L$ = _Trim$(Str$(L~&))
                 T$ = Mid$(Rope(K), File(CurrentFile).HorizontalScrollOffset)
                 L$ = Space$(_SHR(TextOffsetX, 3 + ScreenZoom) - Len(L$) - 1) + L$ + Chr$(179) + Left$(T$, HorizontalCharsVisible)
-                If ScreenZoom Then PrintStringZoom 0, J, L$ Else _PrintString (0, J), L$
+                _PrintString (0, J), L$
                 J = J + _SHL(1, 4 + ScreenZoom)
         Next I
+        SetFont EditorFont_Size_16
+End Sub
+Sub SetFont (Font&)
+        If Font& > 0 And Font& <> _Font Then _Font Font&
 End Sub
 
 '-------- Config Files --------
@@ -685,6 +706,7 @@ Sub NewConfig
         Config_BackgroundColor = _RGB32(32)
         Config_TextColor = _RGB32(255)
         Config_CurrentWorkspace = "codeeditor_workspace"
+        Config_EditorFont = ""
         Config_FileSeperator = Chr$(13) + Chr$(10)
         Config_OpenFileSpeed = 256
 End Sub
@@ -692,12 +714,14 @@ Sub CreateConfig
         MapSetKey Config$, "BackgroundColor", MKL$(Config_BackgroundColor)
         MapSetKey Config$, "TextColor", MKL$(Config_TextColor)
         MapSetKey Config$, "CurrentWorkspace", Config_CurrentWorkspace
+        MapSetKey Config$, "EditorFont", Config_EditorFont
         MapSetKey Config$, "FileSeperator", Config_FileSeperator
         MapSetKey Config$, "OpenFileSpeed", MKL$(Config_OpenFileSpeed)
 End Sub
 Sub ParseConfig
         Config_BackgroundColor = CVL(MapGetKey(Config$, "BackgroundColor"))
         Config_TextColor = CVL(MapGetKey(Config$, "TextColor"))
+        Config_EditorFont = MapGetKey(Config$, "EditorFont")
         Config_FileSeperator = MapGetKey(Config$, "FileSeperator")
         Config_OpenFileSpeed = CVL(MapGetKey(Config$, "OpenFileSpeed"))
 End Sub
@@ -877,27 +901,6 @@ Sub WaitForMouseButtonRelease
 End Sub
 Sub PrintString (X As Integer, Y As Integer, T$) Static
         _PrintString (X, Y), T$
-End Sub
-Sub PrintStringZoom (X As Integer, Y As Integer, T$) Static ', Colour As Long) Static
-        Static As Long FontImage
-        If FontImage = 0 Then
-                FontImage = _NewImage(128, 256, 32)
-                _DontBlend FontImage
-                Cls , 0
-                _Dest FontImage
-                For X = 0 To 15
-                        For Y = 0 To 15
-                                _PrintString (_SHL(X, 3), _SHL(Y, 4)), Chr$(ClampCycle(0, _SHL(Y, 4) + X, 255))
-                Next Y, X
-                _Dest 0
-        End If
-        Dim As _Unsigned Long I
-        For I = 1 To Len(T$)
-                B~%% = Asc(T$, I)
-                __Y~% = _SHR(B~%%, 4)
-                __X~% = B~%% - _SHL(__Y~%, 4)
-                _PutImage (X + _SHL(I - 1, 4), Y)-(X + _SHL(I - 1, 4) + 15, Y + 31), FontImage, , (_SHL(__X~%, 3), _SHL(__Y~%, 4))-(_SHL(__X~%, 3) + 7, _SHL(__Y~%, 4) + 15)
-        Next I
 End Sub
 Function GetLastPathName$ (Path$)
         T~& = _InStrRev(Path$, FILE_SEPERATOR) + 1
