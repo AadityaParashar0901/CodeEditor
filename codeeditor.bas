@@ -55,7 +55,7 @@ ReadConfigFile
 UI_MenuButton_File = UI_New("UI_MenuButton_File", UI_TYPE_MenuButton, 0, 0, 48, 16, " File ", ListStringFromString("\New File|Ctrl+N,\Open File|Ctrl+O,\Save File|Ctrl+S,Save \As File|Ctrl+Shift+S,\Close File|Ctrl+W,E\xit|Ctrl+Q"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 70, 100307, 102
-UI_MenuButton_Workspace = UI_New("UI_MenuButton_Workspace", UI_TYPE_MenuButton, 48, 0, 88, 16, " Workspace ", ListStringFromString("\Open Workspace,\Save Workspace|Ctrl+Alt+S"))
+UI_MenuButton_Workspace = UI_New("UI_MenuButton_Workspace", UI_TYPE_MenuButton, 48, 0, 88, 16, " Workspace ", ListStringFromString("\Open Workspace|Ctrl+Shift+O,\Save Workspace|Ctrl+Shift+W,Save As New \Workspace"))
 UI_Set_BG _RGB32(0, 191, 0)
 UI_Set_KeyMaps 100308, 87, 100307, 119
 UI_MenuButton_View = UI_New("UI_MenuButton_View", UI_TYPE_MenuButton, 136, 0, 48, 16, " View ", ListStringFromString("Go to \File,Go to \Line|Ctrl+G,\Toggle Side Pane|Alt+T,Toggle \Summary Bar|Alt+B,Screen \Zoom"))
@@ -92,26 +92,32 @@ UI_Set_BG _RGB32(47)
 '---------------------------
 '-------- File Dialog --------
 Dim Shared As Integer UI_Dialog_File
-FileDialog "", "" 'First Run
+FileDialog "", "", 0 'First Run
 '-----------------------------
 '-------- Open File Dialog --------
 Dim Shared UI_Dialog_OpenFile_Visible As Integer, OpenFileCurrentDirectory As String
 OpenFileCurrentDirectory = _StartDir$
-OpenFileDialog 'First Run
 '----------------------------------
 '-------- Save As Dialog --------
 Dim Shared UI_Dialog_SaveFileAs_Visible As Integer, SaveFileAsCurrentDirectory As String
 SaveFileAsCurrentDirectory = _StartDir$
-SaveFileAsDialog 'First Run
 '--------------------------------
+'-------- Workspace Open --------
+Dim Shared UI_Dialog_WorkspaceOpen_Visible As Integer, UI_Dialog_WorkspaceOpen_Directory As String
+UI_Dialog_WorkspaceOpen_Directory = _StartDir$
+'--------------------------------
+'-------- Workspace Close --------
+Dim Shared UI_Dialog_WorkspaceSave_Visible As Integer, UI_Dialog_WorkspaceSave_Directory As String
+UI_Dialog_WorkspaceSave_Directory = _StartDir$
+'---------------------------------
 '-------- Go to Line Dialog --------
 Dim Shared As Integer UI_Dialog_GoToLine
 GoToLineDialog 'First Run
 '-----------------------------------
-'-------- File Not Dialog --------
+'-------- File Not Saved Dialog --------
 Dim Shared As Integer UI_FileNotSavedDialog, UI_FileNotSavedDialog_FileName
 FileNotSavedDialog 'First Run
-'---------------------------------
+'---------------------------------------
 
 Dim Shared As Long MainScreen, tmpScreen
 MainScreen = _NewImage(960, 540, 32)
@@ -192,11 +198,15 @@ Do
                 If Summary_Bar Then DrawSummaryBar
                 If UI(UI_Side_Pane).W >= 128 Then DrawSidePane
         End If
-        UI(UI_Dialog_File).Visible = UI_Dialog_OpenFile_Visible Or UI_Dialog_SaveFileAs_Visible
+        UI(UI_Dialog_File).Visible = UI_Dialog_OpenFile_Visible Or UI_Dialog_SaveFileAs_Visible Or UI_Dialog_WorkspaceOpen_Visible Or UI_Dialog_WorkspaceSave_Visible
         If UI_Dialog_OpenFile_Visible Then
                 OpenFileDialog
         ElseIf UI_Dialog_SaveFileAs_Visible Then
                 SaveFileAsDialog
+        ElseIf UI_Dialog_WorkspaceOpen_Visible Then
+                WorkspaceOpenDialog
+        ElseIf UI_Dialog_WorkspaceSave_Visible Then
+                If Config_CurrentWorkspace = "" Then WorkspaceSaveDialog Else SaveWorkspace Config_CurrentWorkspace
         ElseIf UI(UI_Dialog_GoToLine).Visible Then
                 GoToLineDialog
         ElseIf UI_Focus = 0 And CurrentFile Then 'Handle Text Area
@@ -351,19 +361,21 @@ Do
         'New File
         If UI(UI_MenuButton_File).Response = 1 Or (KeyCtrl And (KeyHit = 78 Or KeyHit = 110)) Then NewFile
         'Open File
-        If UI(UI_MenuButton_File).Response = 2 Or (KeyCtrl And (KeyHit = 79 Or KeyHit = 111)) Then UI_Dialog_OpenFile_Visible = -1: UI_Focus = UI_Dialog_File
+        If UI(UI_MenuButton_File).Response = 2 Or (KeyCtrl And KeyShift = 0 And (KeyHit = 79 Or KeyHit = 111)) Then UI_Dialog_OpenFile_Visible = -1: UI_Focus = UI_Dialog_File
         'Save File
         If UI(UI_MenuButton_File).Response = 3 Or (KeyCtrl And KeyShift = 0 And KeyAlt = 0 And (KeyHit = 83 Or KeyHit = 115)) Then SaveFile CurrentFile
         'Save As File
         If UI(UI_MenuButton_File).Response = 4 Or (KeyCtrl And KeyShift And (KeyHit = 83 Or KeyHit = 115)) Then UI_Dialog_SaveFileAs_Visible = -1: UI_Focus = UI_Dialog_File
         'Close File
-        If UI(UI_MenuButton_File).Response = 5 Or (KeyCtrl And (KeyHit = 87 Or KeyHit = 119)) Then CloseFile CurrentFile
+        If UI(UI_MenuButton_File).Response = 5 Or (KeyCtrl And KeyShift = 0 And (KeyHit = 87 Or KeyHit = 119)) Then CloseFile CurrentFile
         'Exit
         If UI(UI_MenuButton_File).Response = 6 Or (KeyCtrl And (KeyHit = 81 Or KeyHit = 113)) Then Exit Do
         'Open Workspace
-        If UI(UI_MenuButton_Workspace).Response = 1 Then OpenWorkspace "codeeditor_workspace"
+        If UI(UI_MenuButton_Workspace).Response = 1 Or (KeyCtrl And KeyShift And (KeyHit = 79 Or KeyHit = 111)) Then UI_Dialog_WorkspaceOpen_Visible = -1: UI_Focus = UI_Dialog_File
         'Save Workspace
-        If UI(UI_MenuButton_Workspace).Response = 2 Or (KeyCtrl And KeyAlt And (KeyHit = 83 Or KeyHit = 115)) Then SaveWorkspace "codeeditor_workspace"
+        If UI(UI_MenuButton_Workspace).Response = 2 Or (KeyCtrl And KeyShift And (KeyHit = 87 Or KeyHit = 119)) Then If Config_CurrentWorkspace = "" Then UI_Dialog_WorkspaceSave_Visible = -1: UI_Focus = UI_Dialog_File Else SaveWorkspace Config_CurrentWorkspace
+        'Save As New Workspace
+        If UI(UI_MenuButton_Workspace).Response = 3 Then UI_Dialog_WorkspaceSave_Visible = -1
         'Go to File
         If UI(UI_MenuButton_View).Response = 1 Then UI(FileChangeDialog).Visible = -1: UI_Focus = FileChangeDialog
         'Go to Line
@@ -502,8 +514,8 @@ Sub UpdateRope (I As Long) Static
 End Sub
 '---------------------------------
 
-Sub FileDialog (T$, D$)
-        Static As Integer ListView, TextView, ButtonOpen, ButtonCancel, LastVisibility
+Sub FileDialog (T$, D$, ShouldFileExist As Integer)
+        Static As Integer ListView, TextView, ButtonOpen, ButtonCancel
         If UI_Dialog_File = 0 Then
                 UI_Dialog_File = UI_New("UI_Dialog_File", UI_TYPE_Dialog, 0, 0, -128, -128, "File", "")
                 UI_Set_FG -1
@@ -518,8 +530,6 @@ Sub FileDialog (T$, D$)
                 Exit Sub
         End If
         Update = 0
-        If UI(UI_Dialog_File).Visible <> LastVisibility Then Update = 1
-        LastVisibility = UI(UI_Dialog_File).Visible
         UI(UI_Dialog_File).Label = T$
         If UI_Focus = 0 Then UI(UI_Dialog_File).Visible = 0: UI(UI_Dialog_File).Response = -1
         Select Case UI(TextView).Response
@@ -527,11 +537,15 @@ Sub FileDialog (T$, D$)
                                 D$ = UI(TextView).Content
                                 Update = 1
                         Else
-                                UI(UI_Dialog_File).Content = UI(TextView).Content
-                                UI(UI_Dialog_File).Response = 1
-                                Update = 1
-                                UI(UI_Dialog_File).Visible = 0
-                                UI_Focus = 0
+                                If ShouldFileExist = 0 Or _FileExists(UI(TextView).Content) Then
+                                        UI(UI_Dialog_File).Content = UI(TextView).Content
+                                        UI(UI_Dialog_File).Response = 1
+                                        Update = 1
+                                        UI(UI_Dialog_File).Visible = 0
+                                        UI_Focus = 0
+                                Else
+                                        Update = 1
+                                End If
                         End If
         End Select
         If Len(UI(ListView).ParsedContent) = 0 Then Update = 1
@@ -566,7 +580,7 @@ Sub FileDialog (T$, D$)
         End If
 End Sub
 Sub OpenFileDialog
-        If UI_Dialog_OpenFile_Visible Then FileDialog "Open File", OpenFileCurrentDirectory
+        If UI_Dialog_OpenFile_Visible Then FileDialog "Open File", OpenFileCurrentDirectory, 0
         Select EveryCase UI(UI_Dialog_File).Response
                 Case -1, 1, 2: UI_Dialog_OpenFile_Visible = 0
                         UI(UI_Dialog_File).Visible = -1
@@ -575,12 +589,27 @@ Sub OpenFileDialog
         End Select
 End Sub
 Sub SaveFileAsDialog
-        If UI_Dialog_SaveFileAs_Visible Then FileDialog "Save As File", SaveFileAsCurrentDirectory
+        If UI_Dialog_SaveFileAs_Visible Then FileDialog "Save As File", SaveFileAsCurrentDirectory, 0
         Select EveryCase UI(UI_Dialog_File).Response
-                Case -1, 1, 2: UI_Dialog_SaveFileAs_Visible = 0
-                        UI(UI_Dialog_File).Visible = -1
+                Case -1, 1, 2: UI_Dialog_SaveFileAs_Visible = 0: UI(UI_Dialog_File).Visible = -1
                 Case 1: File(CurrentFile).Path = UI(UI_Dialog_File).Content
                         SaveFile CurrentFile
+                Case 0: UI(UI_Dialog_File).Visible = -1
+        End Select
+End Sub
+Sub WorkspaceOpenDialog
+        If UI_Dialog_WorkspaceOpen_Visible Then FileDialog "Open Workspace", UI_Dialog_WorkspaceOpen_Directory, 1
+        Select EveryCase UI(UI_Dialog_File).Response
+                Case -1, 1, 2: UI_Dialog_WorkspaceOpen_Visible = 0: UI(UI_Dialog_File).Visible = -1
+                Case 1: If _FileExists(UI(UI_Dialog_File).Content) Then OpenWorkspace UI(UI_Dialog_File).Content
+                Case 0: UI(UI_Dialog_File).Visible = -1
+        End Select
+End Sub
+Sub WorkspaceSaveDialog
+        If UI_Dialog_WorkspaceSave_Visible Then FileDialog "Save Workspace", UI_Dialog_WorkspaceSave_Directory, 0
+        Select EveryCase UI(UI_Dialog_File).Response
+                Case -1, 1, 2: UI_Dialog_WorkspaceSave_Visible = 0: UI(UI_Dialog_File).Visible = -1
+                Case 1: If _FileExists(UI(UI_Dialog_File).Content) Then Config_CurrentWorkspace = UI(UI_Dialog_File).Content: SaveWorkspace UI(UI_Dialog_File).Content
                 Case 0: UI(UI_Dialog_File).Visible = -1
         End Select
 End Sub
@@ -860,6 +889,7 @@ Sub OpenWorkspace (Path$)
                 File(FileID).CursorStack = MapGetKey(FileMap$, "CursorStack")
                 File(FileID).ScrollOffset = CVL(MapGetKey(FileMap$, "ScrollOffset"))
         Next I
+        Config_CurrentWorkspace = Path$
         OpenFileCurrentDirectory = PathBack$(Path$)
         SaveFileAsCurrentDirectory = PathBack$(Path$)
 End Sub
