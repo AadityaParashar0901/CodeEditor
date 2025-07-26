@@ -348,7 +348,11 @@ Do
                         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
                         X = TextOffsetX + _SHL(Min(CursorX, Len(Rope(RopeI)) + 1) - File(CurrentFile).HorizontalScrollOffset, 3 + ScreenZoom)
                         Y = TextOffsetY + _SHL(CursorY - File(CurrentFile).ScrollOffset, 4 + ScreenZoom)
-                        Line (X, Y)-(X + _SHL(1, 3 + ScreenZoom) - 1, Y + _SHL(1, 4 + ScreenZoom) - 1), -1, B
+                        If I = 1 Then
+                                Line (X, Y)-(X + _SHL(1, 3 + ScreenZoom) - 1, Y + _SHL(1, 4 + ScreenZoom) - 1), -1, B
+                        Else
+                                Line (X, Y)-(X, Y + _SHL(1, 4 + ScreenZoom) - 1), -1, B
+                        End If
                 Next I
                 Select Case KeyHit
                         Case 9: If KeyCtrl Then CurrentFile = ClampCycle(LBound(File), CurrentFile + 1, UBound(File)) 'Ctrl Tab
