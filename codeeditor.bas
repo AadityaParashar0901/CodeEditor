@@ -106,10 +106,10 @@ SaveFileAsCurrentDirectory = _StartDir$
 Dim Shared UI_Dialog_WorkspaceOpen_Visible As Integer, UI_Dialog_WorkspaceOpen_Directory As String
 UI_Dialog_WorkspaceOpen_Directory = _StartDir$
 '--------------------------------
-'-------- Workspace Close --------
+'-------- Workspace Save --------
 Dim Shared UI_Dialog_WorkspaceSave_Visible As Integer, UI_Dialog_WorkspaceSave_Directory As String
 UI_Dialog_WorkspaceSave_Directory = _StartDir$
-'---------------------------------
+'--------------------------------
 '-------- Go to Line Dialog --------
 Dim Shared As Integer UI_Dialog_GoToLine
 GoToLineDialog 'First Run
@@ -379,7 +379,7 @@ Do
         'Save Workspace
         If UI(UI_MenuButton_Workspace).Response = 2 Or (KeyCtrl And KeyShift And (KeyHit = 87 Or KeyHit = 119)) Then If Config_CurrentWorkspace = "" Then UI_Dialog_WorkspaceSave_Visible = -1: UI_Focus = UI_Dialog_File Else SaveWorkspace Config_CurrentWorkspace
         'Save As New Workspace
-        If UI(UI_MenuButton_Workspace).Response = 3 Then UI_Dialog_WorkspaceSave_Visible = -1
+        If UI(UI_MenuButton_Workspace).Response = 3 Then Config_CurrentWorkspace = "": UI_Dialog_WorkspaceSave_Visible = -1: UI_Focus = UI_Dialog_File
         'Go to File
         If UI(UI_MenuButton_View).Response = 1 Then UI(FileChangeDialog).Visible = -1: UI_Focus = FileChangeDialog
         'Go to Line
@@ -919,14 +919,14 @@ End Sub
 Function SearchPreviousWord (Sentence As String, CurrentPosition As Long)
         Dim As Long I
         For I = Min(Len(Sentence) - 1, CurrentPosition - 1) To 1 Step -1
-                If Asc(Sentence, I) <> 32 And Asc(Sentence, I + 1) = 32 Then SearchPreviousWord = I: Exit Function
+                If InStr("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890", Chr$(Asc(Sentence, I))) And Asc(Sentence, I + 1) = 32 Then SearchPreviousWord = I: Exit Function
         Next I
         SearchPreviousWord = 1
 End Function
 Function SearchNextWord (Sentence As String, CurrentPosition As Long)
         Dim As Long I
         For I = CurrentPosition To Len(Sentence) - 1
-                If Asc(Sentence, I) = 32 And Asc(Sentence, I + 1) <> 32 Then SearchNextWord = I + 1: Exit Function
+                If Asc(Sentence, I) = 32 And InStr("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890", Chr$(Asc(Sentence, I + 1))) Then SearchNextWord = I + 1: Exit Function
         Next I
         SearchNextWord = Len(Sentence) + 1
 End Function
