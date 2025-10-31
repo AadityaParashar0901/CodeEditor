@@ -330,8 +330,18 @@ Do
                             DeleteText 1, CursorX + 1, CursorY
                         End If
                     End If
-                Case 86, 118: If KeyCtrl Then
+                Case 67, 99 'Ctrl + C
+                    If KeyCtrl Then
+                        _Clipboard$ = Rope(RopeI)
+                    End If
+                Case 86, 118 'Ctrl + V
+                    If KeyCtrl Then
                         InsertText _Clipboard$, CursorX, CursorY
+                    End If
+                Case 88, 120 'Ctrl + X
+                    If KeyCtrl Then
+                        _Clipboard$ = Rope(RopeI)
+                        DeleteLine CursorY
                     End If
             End Select
             If BoundCursor Then
@@ -463,7 +473,32 @@ End Sub
 
 '-------- Rope Management --------
 Sub InsertText (T$, CursorX As Long, CursorY As Long)
-    If InStr(T$, Chr$(10)) Or InStr(T$, Chr$(13)) Then
+    F = -(InStr(T$, Chr$(10)) <> 0) - 2 * (InStr(T$, Chr$(13)) <> 0)
+    If F Then
+        If F = 3 Then
+            FS$ = Chr$(13) + Chr$(10)
+        ElseIf F = 1 Then
+            FS$ = Chr$(10)
+        ElseIf F = 2 Then
+            FS$ = Chr$(13)
+        End If
+        OldI~& = 1
+        I~& = InStr(1, T$, FS$)
+        RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
+        T2$ = Mid$(Rope(RopeI), CursorX)
+        While I~&
+            Rope(RopeI) = Left$(Rope(RopeI), CursorX - 1) + Mid$(T$, OldI~&, I~& - OldI~&)
+            UpdateRope RopeI
+            InsertLine CursorY + 1
+            CursorY = CursorY + 1
+            RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
+            CursorX = 1
+            OldI~& = I~& + Len(FS$)
+            I~& = InStr(I~& + 1, T$, FS$)
+        Wend
+        Rope(RopeI) = Mid$(T$, OldI~&) + T2$
+        UpdateRope RopeI
+        CursorX = Len(Mid$(T$, OldI~&)) + 1
     Else
         RopeI = CVL(Mid$(File(CurrentFile).Content, _SHL(CursorY, 2) - 3, 4))
         Rope(RopeI) = Left$(Rope(RopeI), CursorX - 1) + T$ + Mid$(Rope(RopeI), CursorX)
